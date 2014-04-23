@@ -10,8 +10,20 @@ const (
 	Largs  Size = 19
 )
 
+type Player string
+
+const (
+	While Player = "White"
+	Black Player = "Black"
+)
+
+type Move struct {
+	XPos int
+	YPos int
+}
+
 type Stones struct {
-	Player string //Should be either Black or White
+	Player Player //Should be either Black or White
 	Turn   int    //The turn in which the stone was placed.
 }
 

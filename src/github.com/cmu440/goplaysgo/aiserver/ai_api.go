@@ -6,5 +6,5 @@ type AI interface {
 	// state of the game.
 	// TODO: Decide if we want to specify a timeout
 	// TODO: Decide what will happen if errors are caught
-	NextMove(*airpc.GameState, *airpc.Player) *airpc.Move
+	NextMove(gogame.Board, gogame.Player) gogame.Move
 }
