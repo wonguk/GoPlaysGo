@@ -34,9 +34,7 @@ type Stats struct {
 	GameResults []GameResult
 }
 
-type Standings struct {
-	Stats []Stats
-}
+type Standings []Stats
 
 type RegisterArgs struct {
 	hostname string
