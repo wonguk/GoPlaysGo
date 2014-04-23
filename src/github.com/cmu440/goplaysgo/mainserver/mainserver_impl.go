@@ -56,20 +56,24 @@ func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer,
 
 	ms.ready = make(chan struct{})
 
-	ms.statsMaster = new(statsMaster)
-	ms.statsMaster.reqChan = make(chan statsRequest)
-	ms.statsMaster.allReqChan = make(chan allStatsRequest)
-	ms.statsMaster.initChan = make(chan initRequest)
-	ms.statsMaster.addChan = make(chan mainrpc.GameResult)
-	ms.statsMaster.stats = make(map[string]mainrpc.Stats)
+	statsMaster := new(statsMaster)
+	statsMaster.reqChan = make(chan statsRequest)
+	statsMaster.allReqChan = make(chan allStatsRequest)
+	statsMaster.initChan = make(chan initRequest)
+	statsMaster.addChan = make(chan mainrpc.GameResult)
+	statsMaster.stats = make(map[string]mainrpc.Stats)
 
-	ms.statsMaster.startStatsMaster()
+	go statsMaster.startStatsMaster()
 
-	ms.aiMaster = new(aiMaster)
-	ms.aiMaster.aiChani = make(chan *newAIReq)
-	ms.aiMaster.aiClients = make(map[string]*aiInfo)
+	ms.statsMaster = statsMaster
 
-	go ms.aiMaster.startAIMaster(ms.statsMaster.initChan, ms.statsMaster.addChan)
+	aiMaster := new(aiMaster)
+	aiMaster.aiChani = make(chan *newAIReq)
+	aiMaster.aiClients = make(map[string]*aiInfo)
+
+	go aiMaster.startAIMaster(ms.statsMaster.initChan, ms.statsMaster.addChan)
+
+	ms.aiMaster = aiMaster
 
 	rpc.RegisterName("MainServer", ms)
 	rpc.HandleHTTP()
@@ -78,7 +82,7 @@ func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer,
 		LOGE.Println("Error Listening to port", port, e)
 		return nil, errors.New("error listening to port" + strconv.Itoa(port))
 	}
-	go http.Server(l, nil)
+	go http.Serve(l, nil)
 
 	if ms.master {
 		if ms.numNodes == 1 {
