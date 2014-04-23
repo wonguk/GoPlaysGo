@@ -1,6 +1,14 @@
-package main
+package gogame
 
 import "fmt"
+
+type Size int
+
+const (
+	Small  Size = 9
+	Medium Size = 13
+	Largs  Size = 19
+)
 
 type Stones struct {
 	Player string //Should be either Black or White
