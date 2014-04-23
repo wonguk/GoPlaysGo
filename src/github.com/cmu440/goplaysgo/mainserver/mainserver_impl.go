@@ -27,11 +27,12 @@ type mainServer struct {
 	ready   chan struct{}
 	isReady isReady
 
+	aiMaster    aiMaster
+	statsMaster statsMaster
 	//TODO Paxos variables
 }
 
 func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer, error) {
-	//TODO Implement
 	ms := new(mainServer)
 
 	if masterServerHostPort == "" {
@@ -54,6 +55,21 @@ func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer,
 	ms.servers = []mainrpc.Node{}
 
 	ms.ready = make(chan struct{})
+
+	ms.statsMaster = new(statsMaster)
+	ms.statsMaster.reqChan = make(chan statsRequest)
+	ms.statsMaster.allReqChan = make(chan allStatsRequest)
+	ms.statsMaster.initChan = make(chan initRequest)
+	ms.statsMaster.addChan = make(chan mainrpc.GameResult)
+	ms.statsMaster.stats = make(map[string]mainrpc.Stats)
+
+	ms.statsMaster.startStatsMaster()
+
+	ms.aiMaster = new(aiMaster)
+	ms.aiMaster.aiChani = make(chan *newAIReq)
+	ms.aiMaster.aiClients = make(map[string]*aiInfo)
+
+	go ms.aiMaster.startAIMaster(ms.statsMaster.initChan, ms.statsMaster.addChan)
 
 	rpc.RegisterName("MainServer", ms)
 	rpc.HandleHTTP()
@@ -180,7 +196,7 @@ func (ms *mainServer) RegisterReferee(*mainrpc.RegisterRefArgs, *mainrpc.Registe
 
 // GetServers returns a list of all main servers that are curently
 // connected in the paxos ring
-func (ms *mainServer) GetServers(*mainrpc.GetServersArgs, *mainrpc.getServersReply) error {
+func (ms *mainServer) GetServers(args *mainrpc.GetServersArgs, reply *mainrpc.getServersReply) error {
 	ms.isReady.Lock()
 	defer ms.isReady.Unlock()
 	if !ms.isReady.ready {
@@ -194,21 +210,36 @@ func (ms *mainServer) GetServers(*mainrpc.GetServersArgs, *mainrpc.getServersRep
 }
 
 // SubmitAI takes in an AI go program and schedules them to
-func (ms *mainServer) SubmitAI(*mainrpc.SubmitAIArgs, *mainrpc.SubmitAIReply) error {
+func (ms *mainServer) SubmitAI(args *mainrpc.SubmitAIArgs, reply *mainrpc.SubmitAIReply) error {
+	retChan := make(chan bool)
+	req := &newAIReq{
+		name:     args.name,
+		code:     args.code,
+		manage:   true,
+		hostport: "",
+		retChan:  retChan,
+	}
 
-	//TODO Check AI name
+	ms.aiMaster.aiChan <- req
 
-	//TODO Send AI to handler
+	if <-retChan {
+		reply.Status = mainrpc.OK
+	} else {
+		reply.Status = mainrpc.AIExists
+	}
 
-	//TODO return
-	return errors.New("Not Implemented")
+	return nil
 }
 
 // GetStandings returns the current standings of the different AIs
 // in the server.
-func (ms *mainServer) GetStandings(*mainrpc.GetStangingsArgs, *mainrpc.GetStandingsReply) error {
+func (ms *mainServer) GetStandings(args *mainrpc.GetStangingsArgs, reply *mainrpc.GetStandingsReply) error {
+	retChan := make(chan mainrpc.Standings)
 
-	return errors.New("Not Implemented")
+	reply.Stats = <-retChan
+	reply.Status = mainrpc.OK
+
+	return nil
 }
 
 // TODO: Decide whether or not the RefereeServer should make a rpc

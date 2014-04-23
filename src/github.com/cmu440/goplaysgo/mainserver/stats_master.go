@@ -10,7 +10,7 @@ type statsRequest struct {
 }
 
 type allStatsRequest struct {
-	retChan chan []mainrpc.Stats
+	retChan chan mainrpc.Standings
 }
 
 type initRequest struct {
@@ -21,7 +21,9 @@ type initRequest struct {
 type statsMaster struct {
 	reqChan    chan statsRequest
 	allReqChan chan allStatsRequest
-	addChan    chan mainrpc.GameResult
+
+	initChan chan initRequest
+	addChan  chan mainrpc.GameResult
 
 	stats map[string]mainrpc.Stats
 }
@@ -42,6 +44,15 @@ func (sm *statsMaster) startStatsMaster() {
 
 			req.retChan <- stats
 
+		case init := <-sm.initChan:
+			if _, ok := sm.stats[init.name]; ok {
+				continue
+			}
+
+			//TODO PAXOS
+
+			sm.stats[init.name] = initStats(init.name, init.hostport)
+
 		case res := <-sm.addChan:
 			if _, ok := sm.stats[res.player1]; !ok {
 				continue
@@ -49,6 +60,8 @@ func (sm *statsMaster) startStatsMaster() {
 			if _, ok := sm.stats[res.player2]; !ok {
 				continue
 			}
+
+			//TODO PAXOS
 
 			switch {
 			case res.points1 < res.points2:
@@ -63,14 +76,8 @@ func (sm *statsMaster) startStatsMaster() {
 				sm.stats[res.player1] = updateDraw(sm.stats[res.player1], res)
 				sm.stats[res.player1] = updateDraw(sm.stats[res.player1], res)
 			}
-
-		case init := <-sm.initChan:
-			if _, ok := sm.stats[init.name]; ok {
-				continue
-			}
-
-			sm.stats[init.name] = initStats(init.name, init.hostport)
 		}
+
 	}
 }
 

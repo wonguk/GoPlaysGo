@@ -21,7 +21,7 @@ type aiMaster struct {
 	aiClients map[string]*aiInfo
 }
 
-func (am *aiMaster) startAIMaster() {
+func (am *aiMaster) startAIMaster(initChan chan initRequest, addChan chan mainrpc.GameResult) {
 	for {
 		select {
 		case newAI := <-am.aiChan:
@@ -31,6 +31,8 @@ func (am *aiMaster) startAIMaster() {
 				newAI.retChan <- false
 				continue
 			}
+
+			//TODO PAXOS TO ADD AI
 
 			newInfo := new(aiInfo)
 			newInfo.name = newAI.name
@@ -45,19 +47,21 @@ func (am *aiMaster) startAIMaster() {
 				//      1b) Paxos and let others know
 				//      2) match the AI with all the existing AIs
 				//      3) update the Stats on the go
-				err := newInfo.initAI()
+				hostport, err := newInfo.initAI()
 
 				if err != nil {
 					newAI.retChan <- false
 				} else {
-					go newInfo.testAI(newAI.retChan)
+					newAI.retChan <- true
+					initChan <- initRequest{newAI.name, hostport}
+					go newInfo.testAI(addChan)
 				}
 			}
 		}
 	}
 }
 
-func (ai *aiInfo) initAI() error {
+func (ai *aiInfo) initAI() (string, error) {
 	//TODO use cmd line to compile and run ai
 	// go install github.com/cmu440/goplaysgo/runners/airunner
 	// $GOPATH/bin/airunner -port
@@ -68,11 +72,12 @@ func (ai *aiInfo) initAI() error {
 	err = build.Run()
 	if err != nil || len(out.String()) != 0 {
 		LOGE.Println("error compiling", err)
-		return err
+		return "", err
 	}
 
 	r := rand.New(rand.NewSource(time.Unix()))
 
+	//Keep trying to start the server (This is because we may have overlapping ports)
 	for {
 		port := r.Intn(10000) + 10000
 
@@ -80,50 +85,71 @@ func (ai *aiInfo) initAI() error {
 		err = run.Start()
 
 		if err == nil {
-			return nil
+			hostport := "localhost:" + strconv.Itoa(port)
+			return hostport, nil
 		}
 	}
 }
 
-func (ai *aiInfo) testAI() {
-	//TODO for each AI, make them play each other
-	resultChan := make(chan mainrpc.GameResult)
+func (ai *aiInfo) testAI(resultChan mainrpc.GameResult) {
+	checkArgs := airpc.CheckArgs{}
+	oppCheckArgs := airpc.CheckArgs{ai.name}
 
-	//TODO define args type for ai
-	args := "TODO"
-	oppArgs := "TODO"
+	var checkReply1 airpc.CheckReply
+	var checkReply2 airpc.CheckReply
 
-	numGames := 0
+	initArgs := airpc.InitArgs{gogame.Small}
+	var initReply airpc.InitReply
 
-	for _, opponent := range aiInfos {
-		//TODO 2PC between the two AIs to test
-		err1 := ai.client.Call("AIServer.InitGame", args, reply1)
-		err2 := opponent.client.Call("AIServer.InitGame", oppArgs, reply2)
+	startArgs := airpc.StartArgs{}
+
+	for _, opp := range aiInfos {
+		args.Player = opponent.name
+
+		//2PC between the two AIs to test
+		err1 := ai.client.Call("AIServer.CheckGame", &args, &reply1)
+		err2 := opp.client.Call("AIServer.CheckGame", &oppArgs, &reply2)
 
 		if err1 != nil || err2 != nil {
 			LOGE.Println("testAI:", "failed to match up", ai.name,
-				opponent.name, err1, err2)
+				opp.name, err1, err2)
 			continue
 		}
 
 		if reply1.Status != airpc.OK || reply2.Status != airpc.OK {
 			LOGE.Println("testAI:", "failed to match up", ai.name,
-				opponent.name, reply1.Status, reply2.Status)
+				opp.name, reply1.Status, reply2.Status)
 			continue
 		}
 
-		//TODO if OK, make them play game (Async)
-		numGames += 1
-		call1 := ai.Go("AIServer.StartGame", args, reply)
+		//if OK, make them play game (Async)
+		err1 = ai.client.Call("AIServer.InitGame", &initArgs, &initReply)
+		err2 = opp.client.Call("AIServer.InitGame", &initArgs, &initReply)
 
-		//TODO Launch goroutine to
-		go handleGameResult(call1, ret)
+		var gameResult airpc.StartReply
+		call := ai.Go("AIServer.StartGame", &startArgs, &gameResult, nil)
+
+		//Launch goroutine to notiff statsmaster when game is done
+		go handleGameResult(call, resultChan)
+	}
+}
+
+func handleGameResult(call *rpc.Call, resultChan chan mainrpc.GameResult) {
+	//TODO A Heartbeat to check if the AIs are still alive
+
+	// Wait for the Call to be done
+	call = <-call.Done
+
+	//TODO Error Handling
+	if call.Error != nil {
+		LOGE.Println("AIMaster:", "failed to complete game", call.Error)
+		return
 	}
 
-	//TODO wait for returns
-	for i := 0; i < numGames; i++ {
-		reply := <-ret
-		//TODO Notify StatsMaster about game result
+	if call.Reply.Status != airpc.OK {
+		LOGE.Println("AI Master:", "failed to complete game", call.Reply.Status)
+		return
 	}
 
+	resultChan <- call.Reply.Result
 }
