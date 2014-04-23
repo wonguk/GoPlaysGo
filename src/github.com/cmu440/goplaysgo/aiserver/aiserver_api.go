@@ -13,10 +13,13 @@ type AIServer interface {
 	// the board.
 	NextMove(*airpc.NextMoveArgs, *airpc.NextMoveReply) error
 
+	// CheckGame will be the query to the AI servers to check that they are
+	// available for the 2PC step
+	CheckGame(*airpc.CheckArgs, *airpc.CheckReply) error
+
 	// No Referee Implementation:
-	// InitGame Init Game should be called by the MainServer as a
-	// 2PC between the two AI servers to check that the two AIs are
-	// ready to play each other
+	// InitGame Init Game should be called after CheckGame is OK to initialize
+	// the game/board on each AI server so that they can start the game
 	InitGame(*airpc.InitGameArgs, *airpc.InitGameReply) error
 
 	// StartGame should be called on the AI server that will play first
