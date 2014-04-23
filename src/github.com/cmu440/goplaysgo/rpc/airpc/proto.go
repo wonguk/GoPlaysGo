@@ -1,44 +1,54 @@
 package airpc
 
-import "github.com/cmu440goplaysgo/gogame"
+import "github.com/cmu440/goplaysgo/rpc/mainrpc"
 
-type GameState struct {
-	//This is just like gogame Board, might want to include more
-	Turn int
-	Grid [][]gogame.Stones
+type Status int
+
+const (
+	OK Status = iota + 1
+	NotReady
+	InvalidMove
+	GameExists
+)
+
+// Basic idea behind this is that each AI server
+// maintains the board of the game between a given opponent,
+// so we only need to send the moves we make back and forth
+type NextMoveArgs struct {
+	Player string
+	XPos   int
+	YPos   int
 }
 
-type Player struct {
-
+type NextMoveReply struct {
+	Status Status
+	XPos   int
+	YPos   int
 }
 
-type NextMoveArgs {
-	Board gogame.Board
+type CheckArgs struct {
 	Player string
 }
 
-type NextMoveReply{
-	//If we are using refree then we need:
-	ypos int
-	xpos int
-	//IF we are not then we just need:
-	Board gogame.Board
+type CheckReply struct {
+	Status Status
 }
 
-type InitGameArgs {
-	//This is needed 
+// I think we may need another RPC call before InitGame for the 2PC
+type InitGameArgs struct {
 	size int
 }
 
-type IntGameReply {
-	Board gogame.Board
+type IntGameReply struct {
+	Status Status
 }
 
-type StartGameArgs {
-	size int
+//No args needed
+type StartGameArgs struct {
 }
 
-type StartGameReply {
-	Board gogame.Board
-	Player string
+//StartGame should reply with the
+type StartGameReply struct {
+	Status Status
+	Result mainrpc.GameResult
 }
