@@ -208,3 +208,8 @@ func makeMove(grid [][]Stones, player string, ypos int, xpos int, turn int) ([][
 	}
 	return grid, turn + 1 //Got an invalid move
 }
+
+//TODO Implement
+func (bd *Board) isDone() bool {
+	return false
+}
