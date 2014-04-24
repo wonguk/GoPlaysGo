@@ -17,8 +17,8 @@ const (
 
 //Board Game structs
 type Move struct {
-	XPos int
 	YPos int
+	XPos int
 }
 
 type Stones struct {
@@ -28,17 +28,17 @@ type Stones struct {
 
 type Board struct {
 	Passed int
-	Turn int
-	Grid [][]Stones
+	Turn   int
+	Grid   [][]Stones
 }
 
 //FindPosChain - A helper function that taks a chain of ints and responds with 0
 //				 if y and x are in the chain and 1 if they are not
-func FindPosChain(chain []int, ypos int, xpos int) int {
+func FindPosChain(chain []int, move Move) int {
 	for index := 0; index < len(chain)-1; index += 2 {
 		yindex := chain[index]
 		xindex := chain[index+1]
-		if (xpos == xindex) && (ypos == yindex) {
+		if (move.XPos == xindex) && (move.YPos == yindex) {
 
 			return 0
 		}
@@ -60,8 +60,8 @@ func makeBoard(size int) Board {
 }
 
 //isLegalMove - Checks the board's grid to see if the given x,y pos is safe to place
-func (bd *Board) isLegalMove(player Player, ypos int, xpos int) int {
-	TestStone := bd.Grid[ypos][xpos]
+func (bd *Board) isLegalMove(player Player, move Move) int {
+	TestStone := bd.Grid[move.YPos][move.XPos]
 	if (TestStone.Player == "White") || (TestStone.Player == "Black") {
 		return 0
 	}
@@ -69,60 +69,56 @@ func (bd *Board) isLegalMove(player Player, ypos int, xpos int) int {
 }
 
 //Starting at a certain point on the board this function will branch out and find all connecting pieces
-func (bd *Board) FindStoneChain(ypos int, xpos int, player Player, chain []int, count int) ([]int, int) {
+func (bd *Board) FindStoneChain(move Move, player Player, chain []int, count int) ([]int, int) {
 
-	if xpos > 0 {
-		TempStoneLeft := bd.Grid[ypos][xpos-1]
+	if move.XPos > 0 {
+		TempStoneLeft := bd.Grid[move.YPos][move.XPos-1]
 
-		if (TempStoneLeft.Player == player) && (FindPosChain(chain, ypos, xpos) == 1) {
-
-			chain[count] = ypos
+		if (TempStoneLeft.Player == player) && (FindPosChain(chain, move) == 1) {
+			chain[count] = move.YPos
 			count++
-			chain[count] = xpos
+			chain[count] = move.XPos - 1
 			count++
-			chain, count = bd.FindStoneChain(ypos, xpos-1, player, chain, count)
+			chain, count = bd.FindStoneChain(Move{move.YPos, move.XPos - 1}, player, chain, count)
 		}
 	}
-	if len(bd.Grid)-1 > xpos {
-		TempStoneRight := bd.Grid[ypos][xpos+1]
+	if len(bd.Grid)-1 > move.XPos {
+		TempStoneRight := bd.Grid[move.YPos][move.XPos+1]
 
-		if (TempStoneRight.Player == player) && (FindPosChain(chain, ypos, xpos) == 1) {
-
-			chain[count] = ypos
+		if (TempStoneRight.Player == player) && (FindPosChain(chain, move) == 1) {
+			chain[count] = move.YPos
 			count++
-			chain[count] = xpos + 1
+			chain[count] = move.XPos + 1
 			count++
-			chain, count = bd.FindStoneChain(ypos, xpos+1, player, chain, count)
+			chain, count = bd.FindStoneChain(Move{move.YPos, move.XPos + 1}, player, chain, count)
 		}
 	}
-	if ypos > 0 {
-		TempStoneUp := bd.Grid[ypos-1][xpos]
+	if move.YPos > 0 {
+		TempStoneUp := bd.Grid[move.YPos-1][move.XPos]
 
-		if (TempStoneUp.Player == player) && (FindPosChain(chain, ypos, xpos) == 1) {
-
-			chain[count] = ypos - 1
+		if (TempStoneUp.Player == player) && (FindPosChain(chain, move) == 1) {
+			chain[count] = move.YPos - 1
 			count++
-			chain[count] = xpos
+			chain[count] = move.XPos
 			count++
-			chain, count = bd.FindStoneChain(ypos-1, xpos, player, chain, count)
+			chain, count = bd.FindStoneChain(Move{move.YPos - 1, move.XPos}, player, chain, count)
 		}
 	}
-	if len(bd.Grid)-1 > ypos {
-		TempStoneDown := bd.Grid[ypos+1][xpos]
+	if len(bd.Grid)-1 > move.YPos {
+		TempStoneDown := bd.Grid[move.YPos+1][move.XPos]
 
-		if (TempStoneDown.Player == player) && (FindPosChain(chain, ypos, xpos) == 1) {
-
-			chain[count] = ypos + 1
+		if (TempStoneDown.Player == player) && (FindPosChain(chain, move) == 1) {
+			chain[count] = move.YPos + 1
 			count++
-			chain[count] = xpos
+			chain[count] = move.XPos
 			count++
-			chain, count = bd.FindStoneChain(ypos+1, xpos, player, chain, count)
+			chain, count = bd.FindStoneChain(Move{move.YPos + 1, move.XPos}, player, chain, count)
 		}
 	}
-	if FindPosChain(chain, ypos, xpos) == 1 {
-		chain[count] = ypos
+	if FindPosChain(chain, move) == 1 {
+		chain[count] = move.YPos
 		count++
-		chain[count] = xpos
+		chain[count] = move.XPos
 		count++
 		return chain, count
 	}
@@ -179,17 +175,17 @@ func (bd *Board) CountTerritory(pieces []int, count int) int {
 	return TCount
 }
 
-func (bd *Board) makeMove(player Player, ypos, xpos, turn int) {
+func (bd *Board) makeMove(player Player, move Move, turn int) {
 	PlacedStone := new(Stones)
 	PlacedStone.Player = player
 	PlacedStone.Turn = turn
-	if bd.isLegalMove(player, ypos, xpos) == 1 {
-		bd.Grid[ypos][xpos] = *PlacedStone
+	if bd.isLegalMove(player, move) == 1 {
+		bd.Grid[move.YPos][move.XPos] = *PlacedStone
 		for yindex := 0; yindex < len(bd.Grid); yindex++ {
 			for xindex := 0; xindex < len(bd.Grid); xindex++ {
 				if bd.Grid[yindex][xindex].Player != "" {
 					EmptyChain := make([]int, len(bd.Grid)*len(bd.Grid))
-					StoneChain, ChainLen := bd.FindStoneChain(yindex, xindex, bd.Grid[yindex][xindex].Player, EmptyChain, 0)
+					StoneChain, ChainLen := bd.FindStoneChain(Move{yindex, xindex}, bd.Grid[yindex][xindex].Player, EmptyChain, 0)
 					TerrorityCount := bd.CountTerritory(StoneChain, ChainLen)
 					if TerrorityCount == 0 {
 						for index := 0; index < ChainLen*2; index = index + 2 {
@@ -212,5 +208,5 @@ func (bd *Board) makeMove(player Player, ypos, xpos, turn int) {
 }
 
 func (bd *Board) isDone() bool {
-	return bd.Passed == 2 //Two turns passed with both players passing 
+	return bd.Passed == 2 //Two turns passed with both players passing
 }
