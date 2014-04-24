@@ -1,7 +1,5 @@
 package gogame
 
-import "fmt"
-
 type Size int
 
 const (
@@ -13,28 +11,47 @@ const (
 type Player string
 
 const (
-	While Player = "White"
+	White Player = "White"
 	Black Player = "Black"
 )
 
+//Board Game structs
 type Move struct {
 	XPos int
 	YPos int
 }
 
 type Stones struct {
-	Player Player //Should be either Black or White
-	Turn   int    //The turn in which the stone was placed.
+	Player Player
+	Turn   int
 }
 
 type Board struct {
+	Passed int
 	Turn int
 	Grid [][]Stones
 }
 
+//FindPosChain - A helper function that taks a chain of ints and responds with 0
+//				 if y and x are in the chain and 1 if they are not
+func FindPosChain(chain []int, ypos int, xpos int) int {
+	for index := 0; index < len(chain)-1; index += 2 {
+		yindex := chain[index]
+		xindex := chain[index+1]
+		if (xpos == xindex) && (ypos == yindex) {
+
+			return 0
+		}
+	}
+
+	return 1
+}
+
+//makeBoard - Creates a Board struct with a size by size Grid
 func makeBoard(size int) Board {
 	Bd := new(Board)
 	Bd.Turn = 1
+	Bd.Passed = 0
 	Bd.Grid = make([][]Stones, size)
 	for index := range Bd.Grid {
 		Bd.Grid[index] = make([]Stones, size)
@@ -42,77 +59,64 @@ func makeBoard(size int) Board {
 	return *Bd
 }
 
-func isLegalMove(grid [][]Stones, player string, xpos int, ypos int) int {
-	//Check if there is a piece there
-	TestStone := grid[ypos][xpos]
+//isLegalMove - Checks the board's grid to see if the given x,y pos is safe to place
+func (bd *Board) isLegalMove(player Player, ypos int, xpos int) int {
+	TestStone := bd.Grid[ypos][xpos]
 	if (TestStone.Player == "White") || (TestStone.Player == "Black") {
 		return 0
 	}
 	return 1
 }
 
-func FindPosChain(chain []int, ypos int, xpos int) int {
-	//fmt.Println("Called FindPosChain:", chain, xpos, ypos)
-	for index := 0; index < len(chain); index += 2 {
-		yindex := chain[index]
-		xindex := chain[index+1]
-		if (xpos == xindex) && (ypos == yindex) {
-			//fmt.Println("Found it")
-			return 0
-		}
-	}
-	//fmt.Println("Not here")
-	return 1
-}
+//Starting at a certain point on the board this function will branch out and find all connecting pieces
+func (bd *Board) FindStoneChain(ypos int, xpos int, player Player, chain []int, count int) ([]int, int) {
 
-func FindStoneChain(grid [][]Stones, ypos int, xpos int, player string, chain []int, count int) ([]int, int) {
-	//fmt.Println("Called FindStoneChain at:", xpos, " ", ypos)
 	if xpos > 0 {
-		TempStoneLeft := grid[ypos][xpos-1]
-		//fmt.Println("TempStoneLeft:", TempStoneLeft)
+		TempStoneLeft := bd.Grid[ypos][xpos-1]
+
 		if (TempStoneLeft.Player == player) && (FindPosChain(chain, ypos, xpos) == 1) {
-			//fmt.Println("Turned left")
+
 			chain[count] = ypos
 			count++
 			chain[count] = xpos
 			count++
-			chain, count = FindStoneChain(grid, ypos, xpos-1, player, chain, count)
+			chain, count = bd.FindStoneChain(ypos, xpos-1, player, chain, count)
 		}
 	}
-	if len(grid)-1 > xpos {
-		TempStoneRight := grid[ypos][xpos+1]
-		//fmt.Println("TempStoneRight:", TempStoneRight)
+	if len(bd.Grid)-1 > xpos {
+		TempStoneRight := bd.Grid[ypos][xpos+1]
+
 		if (TempStoneRight.Player == player) && (FindPosChain(chain, ypos, xpos) == 1) {
-			//fmt.Println("Turned right")
+
 			chain[count] = ypos
 			count++
 			chain[count] = xpos + 1
 			count++
-			chain, count = FindStoneChain(grid, ypos, xpos+1, player, chain, count)
+			chain, count = bd.FindStoneChain(ypos, xpos+1, player, chain, count)
 		}
 	}
 	if ypos > 0 {
-		TempStoneUp := grid[ypos-1][xpos]
-		//fmt.Println("TempStoneUp:", TempStoneUp)
+		TempStoneUp := bd.Grid[ypos-1][xpos]
+
 		if (TempStoneUp.Player == player) && (FindPosChain(chain, ypos, xpos) == 1) {
-			//fmt.Println("Turned Up")
+
 			chain[count] = ypos - 1
 			count++
 			chain[count] = xpos
 			count++
-			chain, count = FindStoneChain(grid, ypos-1, xpos, player, chain, count)
+			chain, count = bd.FindStoneChain(ypos-1, xpos, player, chain, count)
 		}
 	}
-	if len(grid)-1 > ypos {
-		TempStoneDown := grid[ypos+1][xpos]
-		//fmt.Println("TempStoneDown:", TempStoneDown)
+	if len(bd.Grid)-1 > ypos {
+		TempStoneDown := bd.Grid[ypos+1][xpos]
+
 		if (TempStoneDown.Player == player) && (FindPosChain(chain, ypos, xpos) == 1) {
-			//fmt.Println("Turned Down")
+
 			chain[count] = ypos + 1
 			count++
 			chain[count] = xpos
 			count++
-			chain, count = FindStoneChain(grid, ypos+1, xpos, player, chain, count)
+			chain, count = bd.FindStoneChain(ypos+1, xpos, player, chain, count)
 		}
 	}
 	if FindPosChain(chain, ypos, xpos) == 1 {
@@ -125,91 +129,88 @@ func FindStoneChain(grid [][]Stones, ypos int, xpos int, player string, chain []
 	return chain, count
 }
 
-func CountTerritory(grid [][]Stones, pieces []int, count int) int {
+func (bd *Board) CountTerritory(pieces []int, count int) int {
 	TCount := 0
-	//fmt.Println("Called Count Territory with:", pieces)
 	for index := 0; index < count; index = index + 2 {
 		ypos := pieces[index]
 		xpos := pieces[index+1]
 		if xpos > 0 {
-			//fmt.Println("Here with:", ypos, xpos)
-			TempStone := grid[ypos][xpos-1]
+			TempStone := bd.Grid[ypos][xpos-1]
 			if TempStone.Player == "" {
 				TempStone.Player = "Taken"
 				TCount++
-				grid[ypos][xpos-1] = TempStone
+				bd.Grid[ypos][xpos-1] = TempStone
 			}
 		}
-		if xpos < len(grid)-1 {
-			TempStone := grid[ypos][xpos+1]
+		if xpos < len(bd.Grid)-1 {
+			TempStone := bd.Grid[ypos][xpos+1]
 			if TempStone.Player == "" {
 				TempStone.Player = "Taken"
 				TCount++
-				grid[ypos][xpos+1] = TempStone
+				bd.Grid[ypos][xpos+1] = TempStone
 			}
 		}
 		if ypos > 0 {
-			TempStone := grid[ypos-1][xpos]
+			TempStone := bd.Grid[ypos-1][xpos]
 			if TempStone.Player == "" {
 				TempStone.Player = "Taken"
 				TCount++
-				grid[ypos-1][xpos] = TempStone
+				bd.Grid[ypos-1][xpos] = TempStone
 			}
 		}
-		if ypos < len(grid)-1 {
-			TempStone := grid[ypos+1][xpos]
+		if ypos < len(bd.Grid)-1 {
+			TempStone := bd.Grid[ypos+1][xpos]
 			if TempStone.Player == "" {
 				TempStone.Player = "Taken"
 				TCount++
-				grid[ypos+1][xpos] = TempStone
+				bd.Grid[ypos+1][xpos] = TempStone
 			}
 		}
 	}
-	for yindex := 0; yindex < len(grid); yindex = yindex + 1 {
-		for xindex := 0; xindex < len(grid); xindex = xindex + 1 {
-			TempStone := grid[yindex][xindex]
+	for yindex := 0; yindex < len(bd.Grid); yindex = yindex + 1 {
+		for xindex := 0; xindex < len(bd.Grid); xindex = xindex + 1 {
+			TempStone := bd.Grid[yindex][xindex]
 			if TempStone.Player == "Taken" {
 				TempStone.Player = ""
-				grid[yindex][xindex] = TempStone
+				bd.Grid[yindex][xindex] = TempStone
 			}
 		}
 	}
 	return TCount
 }
 
-func makeMove(grid [][]Stones, player string, ypos int, xpos int, turn int) ([][]Stones, int) {
+func (bd *Board) makeMove(player Player, ypos, xpos, turn int) {
 	PlacedStone := new(Stones)
 	PlacedStone.Player = player
 	PlacedStone.Turn = turn
-	if isLegalMove(grid, player, ypos, xpos) == 1 {
-		grid[ypos][xpos] = *PlacedStone
-		for yindex := 0; yindex < len(grid); yindex++ {
-			for xindex := 0; xindex < len(grid); xindex++ {
-				if grid[ypos][xpos].Player != "" {
-					//fmt.Println(grid)
-					EmptyChain := make([]int, len(grid)*len(grid))
-					StoneChain, ChainLen := FindStoneChain(grid, yindex, xindex, player, EmptyChain, 0)
-					//fmt.Println(StoneChain, ChainLen)
-					TerrorityCount := CountTerritory(grid, StoneChain, ChainLen)
+	if bd.isLegalMove(player, ypos, xpos) == 1 {
+		bd.Grid[ypos][xpos] = *PlacedStone
+		for yindex := 0; yindex < len(bd.Grid); yindex++ {
+			for xindex := 0; xindex < len(bd.Grid); xindex++ {
+				if bd.Grid[yindex][xindex].Player != "" {
+					EmptyChain := make([]int, len(bd.Grid)*len(bd.Grid))
+					StoneChain, ChainLen := bd.FindStoneChain(yindex, xindex, bd.Grid[yindex][xindex].Player, EmptyChain, 0)
+					TerrorityCount := bd.CountTerritory(StoneChain, ChainLen)
 					if TerrorityCount == 0 {
-						//fmt.Println("Removing pieces")
 						for index := 0; index < ChainLen*2; index = index + 2 {
-							xremove := StoneChain[index]
 							yremove := StoneChain[index]
-							grid[yremove][xremove].Player = ""
-							grid[yremove][xremove].Turn = 0
+							xremove := StoneChain[index+1]
+							bd.Grid[yremove][xremove].Player = ""
+							bd.Grid[yremove][xremove].Turn = 0
 						}
 					}
 				}
 			}
 		}
-
-		return grid, turn + 1
+		bd.Passed = 0
+		bd.Turn++
+		return
 	}
-	return grid, turn + 1 //Got an invalid move
+	bd.Passed++
+	bd.Turn++
+	return
 }
 
-//TODO Implement
 func (bd *Board) isDone() bool {
-	return false
+	return bd.Passed == 2 //Two turns passed with both players passing 
 }
