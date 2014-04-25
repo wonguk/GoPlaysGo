@@ -1,5 +1,7 @@
 package gogame
 
+import "fmt"
+
 type Size int
 
 const (
@@ -42,6 +44,14 @@ func FindPosChain(chain []int, move Move) int {
 
 			return 0
 		}
+		for index2 := index; index2 < len(chain) -1; index +=2 {
+		 yindex2 := chain[index2]
+		 xindex2 := chain[index2+1]
+		 if (xindex2 == xindex) && (yindex2 == yindex) {
+
+			return 0
+		}
+		}
 	}
 
 	return 1
@@ -73,8 +83,7 @@ func (bd *Board) FindStoneChain(move Move, player Player, chain []int, count int
 
 	if move.XPos > 0 {
 		TempStoneLeft := bd.Grid[move.YPos][move.XPos-1]
-
-		if (TempStoneLeft.Player == player) && (FindPosChain(chain, move) == 1) {
+		if (TempStoneLeft.Player == player) && (FindPosChain(chain, Move{move.YPos, move.XPos - 1}) == 1) {
 			chain[count] = move.YPos
 			count++
 			chain[count] = move.XPos - 1
@@ -84,8 +93,10 @@ func (bd *Board) FindStoneChain(move Move, player Player, chain []int, count int
 	}
 	if len(bd.Grid)-1 > move.XPos {
 		TempStoneRight := bd.Grid[move.YPos][move.XPos+1]
-
-		if (TempStoneRight.Player == player) && (FindPosChain(chain, move) == 1) {
+		if (TempStoneRight.Player == player) && (FindPosChain(chain, Move{move.YPos, move.XPos + 1}) == 1) {
+			if move.YPos == 4{
+				fmt.Println("Moved Right to:",TempStoneRight, " with:",chain,count)
+			}
 			chain[count] = move.YPos
 			count++
 			chain[count] = move.XPos + 1
@@ -96,7 +107,7 @@ func (bd *Board) FindStoneChain(move Move, player Player, chain []int, count int
 	if move.YPos > 0 {
 		TempStoneUp := bd.Grid[move.YPos-1][move.XPos]
 
-		if (TempStoneUp.Player == player) && (FindPosChain(chain, move) == 1) {
+		if (TempStoneUp.Player == player) && (FindPosChain(chain, Move{move.YPos - 1, move.XPos}) == 1) {
 			chain[count] = move.YPos - 1
 			count++
 			chain[count] = move.XPos
@@ -107,7 +118,10 @@ func (bd *Board) FindStoneChain(move Move, player Player, chain []int, count int
 	if len(bd.Grid)-1 > move.YPos {
 		TempStoneDown := bd.Grid[move.YPos+1][move.XPos]
 
-		if (TempStoneDown.Player == player) && (FindPosChain(chain, move) == 1) {
+		if (TempStoneDown.Player == player) && (FindPosChain(chain, Move{move.YPos + 1, move.XPos}) == 1) {
+			if move.YPos == 4{
+				fmt.Println("Moved Down to:",TempStoneDown)
+			}
 			chain[count] = move.YPos + 1
 			count++
 			chain[count] = move.XPos
@@ -175,10 +189,10 @@ func (bd *Board) CountTerritory(pieces []int, count int) int {
 	return TCount
 }
 
-func (bd *Board) makeMove(player Player, move Move, turn int) {
+func (bd *Board) makeMove(player Player, move Move) {
 	PlacedStone := new(Stones)
 	PlacedStone.Player = player
-	PlacedStone.Turn = turn
+	PlacedStone.Turn = bd.Turn
 	if bd.isLegalMove(player, move) == 1 {
 		bd.Grid[move.YPos][move.XPos] = *PlacedStone
 		for yindex := 0; yindex < len(bd.Grid); yindex++ {
@@ -209,4 +223,11 @@ func (bd *Board) makeMove(player Player, move Move, turn int) {
 
 func (bd *Board) isDone() bool {
 	return bd.Passed == 2 //Two turns passed with both players passing
+}
+
+func (bd *Board) printBoard() {
+	for index := 0; index < len(bd.Grid); index = index + 1 {
+		fmt.Println(bd.Grid[index])
+	}
+	fmt.Println(" ")
 }
