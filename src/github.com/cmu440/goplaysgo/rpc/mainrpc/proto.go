@@ -45,6 +45,14 @@ type RegisterReply struct {
 	Servers []string
 }
 
+type GetServersArgs struct {
+}
+
+type GetServersReply struct {
+	Status  Status
+	Servers []Node
+}
+
 type RegisterRefArgs struct {
 	hostname string
 }

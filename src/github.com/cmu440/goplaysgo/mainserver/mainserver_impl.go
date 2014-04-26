@@ -180,6 +180,20 @@ func (ms *mainServer) RegisterServer(args *mainrpc.RegisterArgs, reply *mainrpc.
 	return nil
 }
 
+func (ms *mainServer) GetServers(args *mainrpc.GetServersArgs, reply *mainrpc.GetServersReply) error {
+	ms.isReady.Lock()
+	defer ms.isReady.Unlock()
+
+	if !ms.isReady.ready {
+		reply.Status = mainrpc.NotReady
+	} else {
+		reply.Status = mainrpc.OK
+		reply.Servers = ms.servers
+	}
+
+	return nil
+}
+
 func dialHTTP(hostport string) *rpc.Client {
 	client, err := rpc.DialHTTP("tpc", hostport)
 
