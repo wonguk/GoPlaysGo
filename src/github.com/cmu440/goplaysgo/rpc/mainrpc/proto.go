@@ -1,7 +1,5 @@
 package mainrpc
 
-import "net/rpc"
-
 // Status represents the Status of a given RPC Call
 type Status int
 
@@ -18,11 +16,11 @@ const ()
 
 // GameResult contains the result of a game between two AIs
 type GameResult struct {
-	player1 string
-	player2 string
+	Player1 string
+	Player2 string
 
-	points1 int
-	points2 int
+	Points1 int
+	Points2 int
 }
 
 // Stats stores all the information for a given AI
@@ -40,7 +38,7 @@ type Standings []Stats
 
 // RegisterArgs contains the host data to register to the master main server
 type RegisterArgs struct {
-	hostname string
+	Hostport string
 }
 
 // RegisterReply returns all the servers in the paxos chain
@@ -61,7 +59,7 @@ type GetServersReply struct {
 
 // RegisterRefArgs registers the referee server (DEPRECATED)
 type RegisterRefArgs struct {
-	hostname string
+	Hostport string
 }
 
 // RegisterRefReply returns the result of adding the ref (DEPRECATED)
@@ -71,8 +69,8 @@ type RegisterRefReply struct {
 
 // SubmitAIArgs has the AI name and the code that is submitted
 type SubmitAIArgs struct {
-	name string
-	code []byte
+	Name string
+	Code []byte
 }
 
 // SubmitAIReply returns the status of adding the enw AI
@@ -86,7 +84,7 @@ type GetStandingsArgs struct {
 
 // GetStandingReply returns the current standings of the AIs
 // Note: They are not in any specific order
-type GetStandingReply struct {
+type GetStandingsReply struct {
 	Status    Status
 	Standings Standings
 }

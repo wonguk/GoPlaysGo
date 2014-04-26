@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 
@@ -25,12 +26,12 @@ func init() {
 		fmt.Fprintln(os.Stderr, "of the GoClient that can be used to test the mainserver.\n")
 		fmt.Fprintln(os.Stderr, "Usage:")
 		flag.PrintDefaults()
-		fmt.FPrintln(os.Stderr)
-		fmt.FPrintln(os.Stderr, "Possible commands:")
-		fmt.FPrintln(os.Stderr, "  SubmitAI:       sa aiName pathToFile")
-		fmt.FPrintln(os.Stderr, "  GetStandings:   sd")
-		fmt.FPrintln(os.Stderr, "  GetStats:       st aiName")
-		fmt.FPrintln(os.Stderr, "  GetServers:     sv")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "Possible commands:")
+		fmt.Fprintln(os.Stderr, "  SubmitAI:       sa aiName pathToFile")
+		fmt.Fprintln(os.Stderr, "  GetStandings:   sd")
+		fmt.Fprintln(os.Stderr, "  GetStats:       st aiName")
+		fmt.Fprintln(os.Stderr, "  GetServers:     sv")
 	}
 }
 
@@ -59,7 +60,7 @@ func main() {
 		cmdmap[j.cmdline] = j
 	}
 
-	ci, foudn := cmdmap[cmd]
+	ci, found := cmdmap[cmd]
 	if !found {
 		flag.Usage()
 		os.Exit(1)
@@ -78,7 +79,7 @@ func main() {
 		printStatus(ci.funcname, reply.Status, err)
 		for _, stats := range reply.Standings {
 			fmt.Println("Standings for", stats.Name)
-			fmt.Println("HostPort:", stats.HostPort)
+			fmt.Println("HostPort:", stats.Hostport)
 			fmt.Println("(W/L/D):", stats.Wins, "/", stats.Losses, "/", stats.Draws)
 			printResults(stats.GameResults)
 		}
@@ -107,13 +108,13 @@ func printStatus(cmdName string, status mainrpc.Status, err error) {
 	if err != nil {
 		fmt.Println("ERROR:", cmdName, "got error:", err)
 	} else {
-		fmt.Println(cmdName, "replied with Status", statusToString(statud))
+		fmt.Println(cmdName, "replied with Status", statusToString(status))
 	}
 }
 
-func printResults(results []GameResults) {
+func printResults(results []mainrpc.GameResult) {
 	for _, result := range results {
-		fmt.Println("Game:", result.player1, "vs", result.player2,
-			"[", result.points1, ":", result.points2, "]")
+		fmt.Println("Game:", result.Player1, "vs", result.Player2,
+			"[", result.Points1, ":", result.Points2, "]")
 	}
 }

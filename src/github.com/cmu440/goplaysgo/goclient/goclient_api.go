@@ -6,7 +6,7 @@ import (
 
 // GoClient is the interface that the GoClient implements
 type GoClient interface {
-	SubmitAI(string, string) (mainrpc.SubmitAIreply, error)
+	SubmitAI(string, string) (mainrpc.SubmitAIReply, error)
 	GetStandings() (mainrpc.GetStandingsReply, error)
-	GetServers() (mainrpc.GetServers, error)
+	GetServers() (mainrpc.GetServersReply, error)
 }

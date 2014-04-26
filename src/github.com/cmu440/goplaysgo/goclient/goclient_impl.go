@@ -4,7 +4,7 @@ import (
 	"github.com/cmu440/goplaysgo/rpc/mainrpc"
 	"io/ioutil"
 	"net"
-	"rpc"
+	"net/rpc"
 	"strconv"
 )
 
@@ -13,7 +13,7 @@ type goClient struct {
 }
 
 // NewGoClient returns a client for the MainServer in GoPlaysGo
-func NewGoClient(hostname string, port int) (*goClient, err) {
+func NewGoClient(hostname string, port int) (*goClient, error) {
 	cli, err := rpc.DialHTTP("tcp", net.JoinHostPort(hostname, strconv.Itoa(port)))
 	if err != nil {
 		return nil, err
@@ -22,7 +22,7 @@ func NewGoClient(hostname string, port int) (*goClient, err) {
 	return &goClient{client: cli}, nil
 }
 
-func (gc *goClient) SubmitAI(name string, path string) (mainrpc.SubmitAIreply, error) {
+func (gc *goClient) SubmitAI(name string, path string) (mainrpc.SubmitAIReply, error) {
 	var reply mainrpc.SubmitAIReply
 
 	b, err := ioutil.ReadFile(path)
@@ -31,8 +31,8 @@ func (gc *goClient) SubmitAI(name string, path string) (mainrpc.SubmitAIreply, e
 	}
 
 	args := &mainrpc.SubmitAIArgs{
-		name: name,
-		code: b,
+		Name: name,
+		Code: b,
 	}
 
 	err = gc.client.Call("MainServer.SubmitAI", args, &reply)
@@ -49,9 +49,9 @@ func (gc *goClient) GetStandings() (mainrpc.GetStandingsReply, error) {
 	return reply, err
 }
 
-func (gc *goClient) getServers() (mainrpc.GetServers, error) {
-	var args mainrpc.GetServerArgs
-	var reply mainrpc.GetServerReply
+func (gc *goClient) GetServers() (mainrpc.GetServersReply, error) {
+	var args mainrpc.GetServersArgs
+	var reply mainrpc.GetServersReply
 
 	err := gc.client.Call("MainServer.GetServers", &args, &reply)
 
