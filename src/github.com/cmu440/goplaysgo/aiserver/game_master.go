@@ -18,7 +18,7 @@ type checkReq struct {
 type initReq struct {
 	name     string
 	hostport string
-	size     int
+	size     gogame.Size
 	retChan  chan bool
 }
 
@@ -94,7 +94,7 @@ func (gm *gameMaster) startGameMaster() {
 	}
 }
 
-func (gm *gameMaster) initGame(name string, hostport string, size int) *gameHandler {
+func (gm *gameMaster) initGame(name string, hostport string, size gogame.Size) *gameHandler {
 	gh := new(gameHandler)
 	gh.name = gm.name
 	gh.opponent = name
