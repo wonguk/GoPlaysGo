@@ -1,17 +1,18 @@
 package goclient
 
 import (
+	"github.com/cmu440/goplaysgo/rpc/mainrpc"
 	"io/ioutil"
 	"net"
 	"rpc"
 	"strconv"
-	"github.com/cmu440/goplaysgo/rpc/mainrpc"
 )
 
 type goClient struct {
 	client *rpc.Client
 }
 
+// NewGoClient returns a client for the MainServer in GoPlaysGo
 func NewGoClient(hostname string, port int) (*goClient, err) {
 	cli, err := rpc.DialHTTP("tcp", net.JoinHostPort(hostname, strconv.Itoa(port)))
 	if err != nil {
