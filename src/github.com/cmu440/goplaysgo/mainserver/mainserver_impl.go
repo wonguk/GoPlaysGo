@@ -44,8 +44,8 @@ type mainServer struct {
 	ready   chan struct{}
 	isReady isReady
 
-	aiMaster    aiMaster
-	statsMaster statsMaster
+	aiMaster    *aiMaster
+	statsMaster *statsMaster
 	//TODO Paxos variables
 }
 
@@ -87,7 +87,7 @@ func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer,
 	ms.statsMaster = statsMaster
 
 	aiMaster := new(aiMaster)
-	aiMaster.aiChani = make(chan *newAIReq)
+	aiMaster.aiChan = make(chan *newAIReq)
 	aiMaster.aiClients = make(map[string]*aiInfo)
 
 	go aiMaster.startAIMaster(ms.statsMaster.initChan, ms.statsMaster.addChan)
@@ -107,8 +107,8 @@ func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer,
 		if ms.numNodes == 1 {
 			LOGV.Println("Master:", "Done Initializing")
 			ms.isReady.Lock()
-			ms.isReady = true
-			ss.isReady.Unlock()
+			ms.isReady.ready = true
+			ms.isReady.Unlock()
 			return ms, nil
 		}
 
@@ -123,18 +123,22 @@ func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer,
 	}
 
 	LOGV.Println("Slave:", port, "Dialing master")
-	client, err := dialHTTP(masterServerHostPort)
+	client := dialHTTP(masterServerHostPort)
 
 	args := mainrpc.RegisterArgs{hostport}
 	var reply mainrpc.RegisterReply
 
 	for {
 		LOGV.Println("Slave:", port, "registering to master")
-		err = client.Call("MainServer.RegisterServer", &args, &reply)
+		err := client.Call("MainServer.RegisterServer", &args, &reply)
 
 		if err == nil && reply.Status == mainrpc.OK {
-			LOGV.Println("Slave:", nodeID, "Registered to master!")
-			ms.servers = reply.Servers
+			LOGV.Println("Slave:", ms.port, "Registered to master!")
+			ms.servers = make([]node, len(reply.Servers))
+
+			for i, h := range reply.Servers {
+				ms.servers[i].hostport = h
+			}
 
 			ms.initClients()
 
@@ -165,31 +169,31 @@ func (ms *mainServer) RegisterServer(args *mainrpc.RegisterArgs, reply *mainrpc.
 		return errors.New("cannot register server to a slave server")
 	}
 
-	LOGV.Println("RegisterServer:", "registering", args.hostname)
+	LOGV.Println("RegisterServer:", "registering", args.Hostport)
 
 	ms.masterLock.Lock()
 	defer ms.masterLock.Unlock()
 
 	if len(ms.servers) == ms.numNodes {
 		LOGV.Println("RegisterServer:", "Registered all nodes! replying to",
-			args.hostname)
+			args.Hostport)
 		reply.Status = mainrpc.OK
-		reply.Servers = ms.servers
+		reply.Servers = ms.getServers()
 	}
 
 	for _, node := range ms.servers {
-		if node.Hostname == args.Hostname {
+		if node.hostport == args.Hostport {
 			reply.Status = mainrpc.NotReady
 			return nil
 		}
 	}
 
-	client := dialHTTP(args.Hostname)
-	ms.servers = append(ms.servers, mainrpc.Node{args.Hostname, client})
+	client := dialHTTP(args.Hostport)
+	ms.servers = append(ms.servers, node{args.Hostport, client})
 
 	if len(ms.servers) == ms.numNodes {
 		reply.Status = mainrpc.OK
-		reply.Servers = ms.servers
+		reply.Servers = ms.getServers()
 
 		close(ms.ready)
 	} else {
@@ -199,18 +203,14 @@ func (ms *mainServer) RegisterServer(args *mainrpc.RegisterArgs, reply *mainrpc.
 	return nil
 }
 
-func (ms *mainServer) GetServers(args *mainrpc.GetServersArgs, reply *mainrpc.GetServersReply) error {
-	ms.isReady.Lock()
-	defer ms.isReady.Unlock()
+func (ms *mainServer) getServers() []string {
+	servers := make([]string, len(ms.servers))
 
-	if !ms.isReady.ready {
-		reply.Status = mainrpc.NotReady
-	} else {
-		reply.Status = mainrpc.OK
-		reply.Servers = ms.servers
+	for i, n := range ms.servers {
+		servers[i] = n.hostport
 	}
 
-	return nil
+	return servers
 }
 
 // RegisterReferee will add a given referee to the pool of referees
@@ -222,14 +222,14 @@ func (ms *mainServer) RegisterReferee(*mainrpc.RegisterRefArgs, *mainrpc.Registe
 
 // GetServers returns a list of all main servers that are curently
 // connected in the paxos ring
-func (ms *mainServer) GetServers(args *mainrpc.GetServersArgs, reply *mainrpc.getServersReply) error {
+func (ms *mainServer) GetServers(args *mainrpc.GetServersArgs, reply *mainrpc.GetServersReply) error {
 	ms.isReady.Lock()
 	defer ms.isReady.Unlock()
 	if !ms.isReady.ready {
 		reply.Status = mainrpc.NotReady
 	} else {
 		reply.Status = mainrpc.OK
-		reply.Servers = ms.servers
+		reply.Servers = ms.getServers()
 	}
 
 	return nil
@@ -239,8 +239,8 @@ func (ms *mainServer) GetServers(args *mainrpc.GetServersArgs, reply *mainrpc.ge
 func (ms *mainServer) SubmitAI(args *mainrpc.SubmitAIArgs, reply *mainrpc.SubmitAIReply) error {
 	retChan := make(chan bool)
 	req := &newAIReq{
-		name:     args.name,
-		code:     args.code,
+		name:     args.Name,
+		code:     args.Code,
 		manage:   true,
 		hostport: "",
 		retChan:  retChan,
@@ -259,10 +259,10 @@ func (ms *mainServer) SubmitAI(args *mainrpc.SubmitAIArgs, reply *mainrpc.Submit
 
 // GetStandings returns the current standings of the different AIs
 // in the server.
-func (ms *mainServer) GetStandings(args *mainrpc.GetStangingsArgs, reply *mainrpc.GetStandingsReply) error {
+func (ms *mainServer) GetStandings(args *mainrpc.GetStandingsArgs, reply *mainrpc.GetStandingsReply) error {
 	retChan := make(chan mainrpc.Standings)
 
-	reply.Stats = <-retChan
+	reply.Standings = <-retChan
 	reply.Status = mainrpc.OK
 
 	return nil
@@ -270,6 +270,12 @@ func (ms *mainServer) GetStandings(args *mainrpc.GetStangingsArgs, reply *mainrp
 
 // TODO: Decide whether or not the RefereeServer should make a rpc
 // call to the MainServer to return results of a game.
+
+func (ms *mainServer) initClients() {
+	for _, n := range ms.servers {
+		n.client = dialHTTP(n.hostport)
+	}
+}
 
 func dialHTTP(hostport string) *rpc.Client {
 	client, err := rpc.DialHTTP("tpc", hostport)

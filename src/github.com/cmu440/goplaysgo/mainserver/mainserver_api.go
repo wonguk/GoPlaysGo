@@ -15,14 +15,14 @@ type MainServer interface {
 
 	// GetServers returns a list of all main servers that are curently
 	// connected in the paxos ring
-	GetServers(*mainrpc.GetServersArgs, *mainrpc.getServersReply) error
+	GetServers(*mainrpc.GetServersArgs, *mainrpc.GetServersReply) error
 
 	// SubmitAI takes in an AI go program and schedules them to
 	SubmitAI(*mainrpc.SubmitAIArgs, *mainrpc.SubmitAIReply) error
 
 	// GetStandings returns the current standings of the different AIs
 	// in the server.
-	GetStandings(*mainrpc.GetStangingsArgs, *mainrpc.GetStandingsReply) error
+	GetStandings(*mainrpc.GetStandingsArgs, *mainrpc.GetStandingsReply) error
 
 	// TODO: Decide whether or not the RefereeServer should make a rpc
 	// call to the MainServer to return results of a game.

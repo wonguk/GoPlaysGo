@@ -47,7 +47,7 @@ type InitGameArgs struct {
 	Player   string
 	Hostport string
 
-	Size int
+	Size gogame.Size
 }
 
 // InitGameReply returns the result of initializing a game

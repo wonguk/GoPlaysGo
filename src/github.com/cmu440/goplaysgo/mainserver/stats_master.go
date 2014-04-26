@@ -1,7 +1,7 @@
 package mainserver
 
 import (
-	"github.com/cmu440/goplaysgo/mainrpc"
+	"github.com/cmu440/goplaysgo/rpc/mainrpc"
 )
 
 type statsRequest struct {
@@ -54,27 +54,27 @@ func (sm *statsMaster) startStatsMaster() {
 			sm.stats[init.name] = initStats(init.name, init.hostport)
 
 		case res := <-sm.addChan:
-			if _, ok := sm.stats[res.player1]; !ok {
+			if _, ok := sm.stats[res.Player1]; !ok {
 				continue
 			}
-			if _, ok := sm.stats[res.player2]; !ok {
+			if _, ok := sm.stats[res.Player2]; !ok {
 				continue
 			}
 
 			//TODO PAXOS
 
 			switch {
-			case res.points1 < res.points2:
-				sm.stats[res.player1] = updateLoss(sm.stats[res.player1], res)
-				sm.stats[res.player2] = updateWin(sm.stats[res.player2], res)
+			case res.Points1 < res.Points2:
+				sm.stats[res.Player1] = updateLoss(sm.stats[res.Player1], res)
+				sm.stats[res.Player2] = updateWin(sm.stats[res.Player2], res)
 
-			case add.points2 < add.points1:
-				sm.stats[res.player1] = updateWin(sm.stats[res.player1], res)
-				sm.stats[res.player2] = updateLoss(sm.stats[res.player2], res)
+			case res.Points2 < res.Points1:
+				sm.stats[res.Player1] = updateWin(sm.stats[res.Player1], res)
+				sm.stats[res.Player2] = updateLoss(sm.stats[res.Player2], res)
 
-			case add.points1 == add.points2:
-				sm.stats[res.player1] = updateDraw(sm.stats[res.player1], res)
-				sm.stats[res.player1] = updateDraw(sm.stats[res.player1], res)
+			case res.Points1 == res.Points2:
+				sm.stats[res.Player1] = updateDraw(sm.stats[res.Player1], res)
+				sm.stats[res.Player1] = updateDraw(sm.stats[res.Player1], res)
 			}
 		}
 
@@ -109,7 +109,7 @@ func initStats(name string, hostport string) mainrpc.Stats {
 		Wins:        0,
 		Losses:      0,
 		Draws:       0,
-		GameResults: []GameResult{},
+		GameResults: []mainrpc.GameResult{},
 	}
 
 	return s
