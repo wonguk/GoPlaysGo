@@ -213,17 +213,6 @@ func (ms *mainServer) GetServers(args *mainrpc.GetServersArgs, reply *mainrpc.Ge
 	return nil
 }
 
-func dialHTTP(hostport string) *rpc.Client {
-	client, err := rpc.DialHTTP("tpc", hostport)
-
-	for err != nil {
-		time.Sleep(time.Second)
-		client, err = rpc.DialHTTP("tcp", hostport)
-	}
-
-	return client
-}
-
 // RegisterReferee will add a given referee to the pool of referees
 // TODO Need to decide how to spawn/handle referees
 func (ms *mainServer) RegisterReferee(*mainrpc.RegisterRefArgs, *mainrpc.RegisterRefReply) error {
@@ -281,3 +270,14 @@ func (ms *mainServer) GetStandings(args *mainrpc.GetStangingsArgs, reply *mainrp
 
 // TODO: Decide whether or not the RefereeServer should make a rpc
 // call to the MainServer to return results of a game.
+
+func dialHTTP(hostport string) *rpc.Client {
+	client, err := rpc.DialHTTP("tpc", hostport)
+
+	for err != nil {
+		time.Sleep(time.Second)
+		client, err = rpc.DialHTTP("tcp", hostport)
+	}
+
+	return client
+}
