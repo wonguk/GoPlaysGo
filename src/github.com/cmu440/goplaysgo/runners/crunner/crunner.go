@@ -1,10 +1,12 @@
 package main
 
 import (
+	"flag"
+	"log"
 	"os"
 
 	"github.com/cmu440/goplaysgo/goclient"
-	"github.com/cmu440/goplaysgo/mainserver"
+	"github.com/cmu440/goplaysgo/rpc/mainrpc"
 )
 
 var port = flag.Int("port", 9099, "Mainserver port number")

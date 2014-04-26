@@ -1,8 +1,12 @@
 package aiserver
 
 import (
-	"github.com/cmu440/goplaysgo/gogame"
+	"net/http"
+	"net/rpc"
+	"strconv"
+
 	"github.com/cmu440/goplaysgo/rpc/airpc"
+	"github.com/cmu440/goplaysgo/rpc/mainrpc"
 )
 
 type aiServer struct {

@@ -1,5 +1,7 @@
 package aitest
 
+import "fmt"
+
 func TestRows(testBoard *Board) bool {
 	AnswerBoard := makeBoard(len(testBoard.Grid))
 	Turn := 1
@@ -122,7 +124,6 @@ func TestInnerSquare(testBoard *Board) bool {
 	testBoard.makeMove(Black, Move{(len(testBoard.Grid) / 2) + 1, (len(testBoard.Grid) / 2)})
 	testBoard.makeMove(Black, Move{(len(testBoard.Grid) / 2) + 1, (len(testBoard.Grid) / 2) + 1})
 
-
 	AnswerBoard.Grid[(len(testBoard.Grid) / 2)][(len(testBoard.Grid) / 2)] = Stones{Black, Turn}
 	AnswerBoard.Grid[(len(testBoard.Grid) / 2)][(len(testBoard.Grid)/2)+1] = Stones{Black, Turn + 1}
 	AnswerBoard.Grid[(len(testBoard.Grid)/2)+1][(len(testBoard.Grid) / 2)] = Stones{Black, Turn + 2}
@@ -140,4 +141,3 @@ func TestInnerSquare(testBoard *Board) bool {
 	}
 	return true
 }
-

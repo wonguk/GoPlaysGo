@@ -1,5 +1,7 @@
 package mainrpc
 
+import "net/rpc"
+
 type Status int
 
 const (

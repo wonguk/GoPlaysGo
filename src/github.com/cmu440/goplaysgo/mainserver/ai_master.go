@@ -1,5 +1,18 @@
 package mainserver
 
+import (
+	"bytes"
+	"io/ioutil"
+	"math/rand"
+	"net/rpc"
+	"os/exec"
+	"strconv"
+	"time"
+
+	"github.com/cmu440/goplaysgo/gogame"
+	"github.com/cmu440/goplaysgo/rpc/mainrpc"
+)
+
 type aiInfo struct {
 	name     string
 	code     []byte

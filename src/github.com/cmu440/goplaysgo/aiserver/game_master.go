@@ -1,5 +1,12 @@
 package aiserver
 
+import (
+	"net/rpc"
+
+	"github.com/cmu440/goplaysgo/rpc/airpc"
+	"github.com/cmu440/goplaysgo/rpc/mainrpc"
+)
+
 type checkReq struct {
 	name    string
 	retChan chan bool

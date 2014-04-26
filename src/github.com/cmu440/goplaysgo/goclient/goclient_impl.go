@@ -2,9 +2,9 @@ package goclient
 
 import (
 	"io/ioutil"
+	"net"
 	"rpc"
-
-	"github.com/cmu440/goplaysgo/mainserver"
+	"strconv"
 	"github.com/cmu440/goplaysgo/rpc/mainrpc"
 )
 
