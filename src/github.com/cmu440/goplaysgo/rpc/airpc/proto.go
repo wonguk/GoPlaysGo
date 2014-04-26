@@ -5,8 +5,10 @@ import (
 	"github.com/cmu440/goplaysgo/rpc/mainrpc"
 )
 
+// Status represents the Status of a given RPC Reply
 type Status int
 
+// The Different Possible Statuses
 const (
 	OK Status = iota + 1
 	NotReady
@@ -14,6 +16,7 @@ const (
 	GameExists
 )
 
+// NextMoveArgs represents a move that the opponent played
 // Basic idea behind this is that each AI server
 // maintains the board of the game between a given opponent,
 // so we only need to send the moves we make back and forth
@@ -22,20 +25,24 @@ type NextMoveArgs struct {
 	Move   gogame.Move
 }
 
+// NextMoveReply represents the move that the AIServer played
 type NextMoveReply struct {
 	Status Status
 	Move   gogame.Move
 }
 
+// CheckArgs basically asks the AIServer if it is OK to play the game
+// with the player specified
 type CheckArgs struct {
 	Player string
 }
 
+// CheckReply represents whether or not the AIServer is okay to play
 type CheckReply struct {
 	Status Status
 }
 
-// I think we may need another RPC call before InitGame for the 2PC
+// InitGameArgs are the arguments needed to initalize a game with the given opponent
 type InitGameArgs struct {
 	Player   string
 	Hostport string
@@ -43,15 +50,17 @@ type InitGameArgs struct {
 	Size int
 }
 
-type IntGameReply struct {
+// InitGameReply returns the result of initializing a game
+type InitGameReply struct {
 	Status Status
 }
 
+// StartGameArgs starts the game with the specified Player
 type StartGameArgs struct {
 	Player string
 }
 
-//StartGame should reply with the
+//StartGameReply returns the result of the game
 type StartGameReply struct {
 	Status Status
 	Result mainrpc.GameResult

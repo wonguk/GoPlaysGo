@@ -27,6 +27,11 @@ type isReady struct {
 	ready bool
 }
 
+type node struct {
+	hostport string
+	client   *rpc.Client
+}
+
 type mainServer struct {
 	master     bool
 	masterLock sync.Mutex
@@ -34,7 +39,7 @@ type mainServer struct {
 	masterAddr string
 	numNodes   int
 	port       int
-	servers    []mainrpc.Node
+	servers    []node
 
 	ready   chan struct{}
 	isReady isReady
@@ -66,7 +71,7 @@ func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer,
 	ms.numNodes = numNodes
 	ms.port = port
 
-	ms.servers = []mainrpc.Node{}
+	ms.servers = []node{}
 
 	ms.ready = make(chan struct{})
 
