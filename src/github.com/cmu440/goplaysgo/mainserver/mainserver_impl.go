@@ -14,9 +14,11 @@ import (
 	"github.com/cmu440/goplaysgo/rpc/mainrpc"
 )
 
+// Error Log
 var LOGE = log.New(ioutil.Discard, "ERROR [MainServer] ",
 	log.Lmicroseconds|log.Lshortfile)
 
+// Verbose Log
 var LOGV = log.New(ioutil.Discard, "VERBOSE [MainServer] ",
 	log.Lmicroseconds|log.Lshortfile)
 
@@ -42,6 +44,8 @@ type mainServer struct {
 	//TODO Paxos variables
 }
 
+// NewMainServer returns a mainserver that manages the different AIs and
+// their stats
 func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer, error) {
 	ms := new(mainServer)
 
@@ -111,40 +115,40 @@ func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer,
 		ms.isReady.Unlock()
 
 		return ms, nil
-	} else {
-		LOGV.Println("Slave:", port, "Dialing master")
-		client, err := dialHTTP(masterServerHostPort)
-
-		args := mainrpc.RegisterArgs{hostport}
-		var reply mainrpc.RegisterReply
-
-		for {
-			LOGV.Println("Slave:", port, "registering to master")
-			err = client.Call("MainServer.RegisterServer", &args, &reply)
-
-			if err == nil && reply.Status == mainrpc.OK {
-				LOGV.Println("Slave:", nodeID, "Registered to master!")
-				ms.servers = reply.Servers
-
-				ms.initClients()
-
-				ms.isReady.Lock()
-				ms.isReady.ready = true
-				ms.isReady.Unlock()
-
-				return ms, nil
-			}
-
-			if err != nil {
-				LOGE.Println("Slave:", port, "erro registereing to master", err)
-			}
-
-			LOGV.Println("Slave:", port, "sleeping for 1 second")
-			time.Sleep(time.Second)
-		}
 	}
 
-	return nil, errors.New("Should have been successful")
+	LOGV.Println("Slave:", port, "Dialing master")
+	client, err := dialHTTP(masterServerHostPort)
+
+	args := mainrpc.RegisterArgs{hostport}
+	var reply mainrpc.RegisterReply
+
+	for {
+		LOGV.Println("Slave:", port, "registering to master")
+		err = client.Call("MainServer.RegisterServer", &args, &reply)
+
+		if err == nil && reply.Status == mainrpc.OK {
+			LOGV.Println("Slave:", nodeID, "Registered to master!")
+			ms.servers = reply.Servers
+
+			ms.initClients()
+
+			ms.isReady.Lock()
+			ms.isReady.ready = true
+			ms.isReady.Unlock()
+
+			return ms, nil
+		}
+
+		if err != nil {
+			LOGE.Println("Slave:", port, "erro registereing to master", err)
+		}
+
+		LOGV.Println("Slave:", port, "sleeping for 1 second")
+		time.Sleep(time.Second)
+	}
+
+	return nil, errors.New("should have been successful")
 }
 
 // RegisterServer will add the servers into the Paxos ring
@@ -219,7 +223,7 @@ func dialHTTP(hostport string) *rpc.Client {
 // TODO Need to decide how to spawn/handle referees
 func (ms *mainServer) RegisterReferee(*mainrpc.RegisterRefArgs, *mainrpc.RegisterRefReply) error {
 
-	return errors.New("Not Implemented")
+	return errors.New("not implemented")
 }
 
 // GetServers returns a list of all main servers that are curently

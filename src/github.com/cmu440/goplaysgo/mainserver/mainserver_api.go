@@ -1,5 +1,8 @@
 package mainserver
 
+import "github.com/cmu440/goplaysgo/rpc/mainrpc"
+
+//The MainServer interface implements all the external rpc calls by clients
 type MainServer interface {
 	// RegisterServer will add the servers into the Paxos ring
 	// of main servers. Initially, there will be a master main server,

@@ -82,21 +82,21 @@ func (sm *statsMaster) startStatsMaster() {
 }
 
 func updateWin(s mainrpc.Stats, res mainrpc.GameResult) mainrpc.Stats {
-	s.Wins += 1
+	s.Wins++
 	s.GameResults = append(s.GameResults, res)
 
 	return s
 }
 
 func updateLoss(s mainrpc.Stats, res mainrpc.GameResult) mainrpc.Stats {
-	s.Losses += 1
+	s.Losses++
 	s.GameResults = append(s.GameResults, res)
 
 	return s
 }
 
 func updateDraw(s mainrpc.Stats, res mainrpc.GameResult) mainrpc.Stats {
-	s.Draws += 1
+	s.Draws++
 	s.GameResults = append(s.GameResults, res)
 
 	return s
