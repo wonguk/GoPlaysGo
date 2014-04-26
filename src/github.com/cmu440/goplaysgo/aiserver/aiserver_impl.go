@@ -12,7 +12,7 @@ type aiServer struct {
 	gm *gameMaster
 }
 
-func NewAIServer(name string, port int) (AIServer, error) {
+func NewAIServer(name string, port int, mainServerPort string) (AIServer, error) {
 	as := new(aiServer)
 
 	as.name = name
