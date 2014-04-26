@@ -16,6 +16,7 @@ type aiServer struct {
 	gm *gameMaster
 }
 
+// NewAIServer returns an AIServer that plays games with other AI Servers
 func NewAIServer(name string, port int, mainServerPort string) (AIServer, error) {
 	as := new(aiServer)
 

@@ -1,5 +1,6 @@
 package aiserver
 
+// AIServer is the interface that the Main Server uses through rpc
 type AIServer interface {
 	//TODO: Do we need a Referee Server.....?
 	// We could have the AIServers implement the GO rules, which would
