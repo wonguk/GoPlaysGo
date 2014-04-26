@@ -1,6 +1,9 @@
 package aiserver
 
 import (
+	"io/ioutil"
+	"log"
+	"net"
 	"net/http"
 	"net/rpc"
 	"strconv"
@@ -8,6 +11,14 @@ import (
 	"github.com/cmu440/goplaysgo/rpc/airpc"
 	"github.com/cmu440/goplaysgo/rpc/mainrpc"
 )
+
+// Error Log
+var LOGE = log.New(ioutil.Discard, "ERROR [AIServer] ",
+	log.Lmicroseconds|log.Lshortfile)
+
+// Verbose Log
+var LOGV = log.New(ioutil.Discard, "VERBOSE [AIServer] ",
+	log.Lmicroseconds|log.Lshortfile)
 
 type aiServer struct {
 	name     string
@@ -37,7 +48,7 @@ func NewAIServer(name string, port int, mainServerPort string) (AIServer, error)
 
 	rpc.RegisterName("AIServer", as)
 	rpc.HandleHTTP()
-	l, e := net.Lsiten("tcp", ":"+strconv.Itoa(port))
+	l, e := net.Listen("tcp", ":"+strconv.Itoa(port))
 	if e != nil {
 		return nil, e
 	}
@@ -56,7 +67,7 @@ func (as *aiServer) NextMove(args *airpc.NextMoveArgs, reply *airpc.NextMoveRepl
 		replyChan: replyChan,
 	}
 
-	as.gameMaster.moveChan <- req
+	as.gm.moveChan <- req
 
 	reply = <-replyChan
 
@@ -70,6 +81,8 @@ func (as *aiServer) CheckGame(args *airpc.CheckArgs, reply *airpc.CheckReply) er
 		name:    args.Player,
 		retChan: retChan,
 	}
+
+	as.gm.checkChan <- req
 
 	if <-retChan {
 		reply.Status = airpc.OK
@@ -90,6 +103,8 @@ func (as *aiServer) InitGame(args *airpc.InitGameArgs, reply *airpc.InitGameRepl
 		retChan:  retChan,
 	}
 
+	as.gm.initChan <- req
+
 	<-retChan
 
 	reply.Status = airpc.OK
@@ -105,7 +120,9 @@ func (as *aiServer) StartGame(args *airpc.StartGameArgs, reply *airpc.StartGameR
 		retChan: retChan,
 	}
 
-	reply.Status = mainrpc.OK
+	as.gm.startChan <- req
+
+	reply.Status = airpc.OK
 	reply.Result = <-retChan
 
 	return nil

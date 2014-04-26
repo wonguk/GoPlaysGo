@@ -2,7 +2,10 @@ package aiserver
 
 import (
 	"net/rpc"
+	"time"
 
+	"github.com/cmu440/goplaysgo/ai"
+	"github.com/cmu440/goplaysgo/gogame"
 	"github.com/cmu440/goplaysgo/rpc/airpc"
 	"github.com/cmu440/goplaysgo/rpc/mainrpc"
 )
@@ -61,7 +64,7 @@ func (gm *gameMaster) startGameMaster() {
 
 		case req := <-gm.initChan:
 			newGame := gm.initGame(req.name, req.hostport, req.size)
-			games[req.name] = newGame
+			gm.games[req.name] = newGame
 
 			go newGame.startGameHandler()
 
@@ -78,10 +81,11 @@ func (gm *gameMaster) startGameMaster() {
 			game.startChan <- req
 
 		case req := <-gm.moveChan:
-			game, ok := gm.games[req.name]
+			game, ok := gm.games[req.args.Player]
 
 			if !ok {
-				LOGE.Println("GameMaster:", "Game between", req.name, "does not exist!")
+				LOGE.Println("GameMaster:", "Game between", req.args.Player,
+					"does not exist!")
 				continue
 			}
 
@@ -97,7 +101,7 @@ func (gm *gameMaster) initGame(name string, hostport string, size int) *gameHand
 	gh.startChan = make(chan startReq)
 	gh.moveChan = make(chan moveReq)
 	gh.oppClient = initClient(hostport)
-	gh.game = gogame.makeBoard(size)
+	gh.game = gogame.MakeBoard(size)
 
 	return gh
 }
@@ -123,11 +127,12 @@ func (gh *gameHandler) startGameHandler() {
 			req.replyChan <- req.reply
 
 		case req := <-gh.startChan:
-			args := airpc.NextMoveArgs{gh.name}
+			args := airpc.NextMoveArgs{}
+			args.Player = gh.name
 			var reply airpc.NextMoveReply
 
 			for {
-				if gh.game.isDone() {
+				if gh.game.IsDone() {
 					break
 				}
 
@@ -137,13 +142,17 @@ func (gh *gameHandler) startGameHandler() {
 				// Update Current Board
 				gh.game.MakeMove(gogame.White, nextMove)
 
-				if gh.game.isDone() {
+				if gh.game.IsDone() {
 					break
 				}
 
 				// Send RPC to Opponent for Next Move
 				args.Move = nextMove
-				err := client.Call("AIServer.NextMove", &args, &reply)
+				err := gh.oppClient.Call("AIServer.NextMove", &args, &reply)
+
+				if err != nil {
+					LOGE.Println("GameHandler:", "RPC Error against", gh.opponent, err)
+				}
 
 				// Update Board from reply
 				gh.game.MakeMove(gogame.Black, reply.Move)
@@ -151,13 +160,24 @@ func (gh *gameHandler) startGameHandler() {
 
 			// Return Game Result
 			result := mainrpc.GameResult{
-				player1: gh.name,
-				player2: gh.opponent,
-				points1: gh.game.GetPoints(gogame.White),
-				points2: gh.game.GetPoints(gogame.Black),
+				Player1: gh.name,
+				Player2: gh.opponent,
+				Points1: gh.game.GetPoints(gogame.White),
+				Points2: gh.game.GetPoints(gogame.Black),
 			}
 
 			req.retChan <- result
 		}
 	}
+}
+
+func initClient(hostport string) *rpc.Client {
+	client, err := rpc.DialHTTP("tcp", hostport)
+
+	for err != nil {
+		time.Sleep(time.Second)
+		client, err = rpc.DialHTTP("tcp", hostport)
+	}
+
+	return client
 }

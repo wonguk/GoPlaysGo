@@ -1,5 +1,7 @@
 package aiserver
 
+import "github.com/cmu440/goplaysgo/rpc/airpc"
+
 // AIServer is the interface that the Main Server uses through rpc
 type AIServer interface {
 	//TODO: Do we need a Referee Server.....?

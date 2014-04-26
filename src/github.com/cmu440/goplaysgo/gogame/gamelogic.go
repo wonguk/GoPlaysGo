@@ -57,8 +57,8 @@ func FindPosChain(chain []int, move Move) int {
 	return 1
 }
 
-//makeBoard - Creates a Board struct with a size by size Grid
-func makeBoard(size int) Board {
+//MakeBoard - Creates a Board struct with a size by size Grid
+func MakeBoard(size int) Board {
 	Bd := new(Board)
 	Bd.Turn = 1
 	Bd.Passed = 0
@@ -189,7 +189,7 @@ func (bd *Board) CountTerritory(pieces []int, count int) int {
 	return TCount
 }
 
-func (bd *Board) makeMove(player Player, move Move) {
+func (bd *Board) MakeMove(player Player, move Move) {
 	PlacedStone := new(Stones)
 	PlacedStone.Player = player
 	PlacedStone.Turn = bd.Turn
@@ -221,7 +221,7 @@ func (bd *Board) makeMove(player Player, move Move) {
 	return
 }
 
-func (bd *Board) isDone() bool {
+func (bd *Board) IsDone() bool {
 	return bd.Passed == 2 //Two turns passed with both players passing
 }
 
@@ -230,4 +230,8 @@ func (bd *Board) printBoard() {
 		fmt.Println(bd.Grid[index])
 	}
 	fmt.Println(" ")
+}
+
+func (bd *Board) GetPoints(player Player) int {
+	return 0
 }
