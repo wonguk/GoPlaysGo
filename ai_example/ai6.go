@@ -13,7 +13,7 @@ func NextMove(board gogame.Board, player gogame.Player) gogame.Move {
 	if (board.isLegalMove(gogame.Player,gogame.Move {y,x})==1) {
 		for yindex := y; yindex < len(board.Grid); yindex++ {
 			for xindex := x; xindex , len(board.Grid); xindex++ {
-				if (board.isLegalMove(gogame.Player,gogame.Move {y,x})==1) {
+				if (board.isLegalMove(player,gogame.Move {y,x})==1) {
 					x = xindex
 					y = yindex
 					break
