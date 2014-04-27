@@ -71,6 +71,12 @@ func MakeBoard(size int) Board {
 
 //isLegalMove - Checks the board's grid to see if the given x,y pos is safe to place
 func (bd *Board) isLegalMove(player Player, move Move) int {
+	if (move.YPos => len(bd.Grid)) || (move.YPos < 0) {
+		return 0
+	}
+	if (move.XPos => len(bd.Grid)) || (move.XPos < 0) {
+		return 0
+	}
 	TestStone := bd.Grid[move.YPos][move.XPos]
 	if (TestStone.Player == "White") || (TestStone.Player == "Black") {
 		return 0
