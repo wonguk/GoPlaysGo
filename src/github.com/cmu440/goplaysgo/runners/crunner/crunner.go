@@ -38,11 +38,7 @@ func init() {
 func main() {
 	flag.Parse()
 
-	if flag.NArg() < 2 {
-		flag.Usage()
-		os.Exit(1)
-	}
-
+	println("Starting CRunner")
 	cmd := flag.Arg(0)
 	client, err := goclient.NewGoClient("localhost", *port)
 	if err != nil {
@@ -62,19 +58,23 @@ func main() {
 
 	ci, found := cmdmap[cmd]
 	if !found {
+		fmt.Fprintln(os.Stderr, "ASDAS")
 		flag.Usage()
 		os.Exit(1)
 	}
 	if flag.NArg() < (ci.nargs + 1) {
+		fmt.Fprintln(os.Stderr, "QWEQWE")
 		flag.Usage()
 		os.Exit(1)
 	}
 
 	switch cmd {
 	case "sa":
+		println("Submitting AI")
 		reply, err := client.SubmitAI(flag.Arg(1), flag.Arg(2))
 		printStatus(ci.funcname, reply.Status, err)
 	case "sd":
+		println("Getting Standings")
 		reply, err := client.GetStandings()
 		printStatus(ci.funcname, reply.Status, err)
 		for _, stats := range reply.Standings {
@@ -84,6 +84,7 @@ func main() {
 			printResults(stats.GameResults)
 		}
 	case "sv":
+		println("Getting Servers")
 		reply, err := client.GetServers()
 		printStatus(ci.funcname, reply.Status, err)
 	}
