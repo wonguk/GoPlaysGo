@@ -2,11 +2,12 @@ package mainserver
 
 import (
 	"errors"
-	"io/ioutil"
+	//"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"net/rpc"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -15,11 +16,11 @@ import (
 )
 
 // Error Log
-var LOGE = log.New(ioutil.Discard, "ERROR [MainServer] ",
+var LOGE = log.New(os.Stdout, "ERROR [MainServer] ",
 	log.Lmicroseconds|log.Lshortfile)
 
 // Verbose Log
-var LOGV = log.New(ioutil.Discard, "VERBOSE [MainServer] ",
+var LOGV = log.New(os.Stdout, "VERBOSE [MainServer] ",
 	log.Lmicroseconds|log.Lshortfile)
 
 type isReady struct {
@@ -223,6 +224,7 @@ func (ms *mainServer) RegisterReferee(*mainrpc.RegisterRefArgs, *mainrpc.Registe
 // GetServers returns a list of all main servers that are curently
 // connected in the paxos ring
 func (ms *mainServer) GetServers(args *mainrpc.GetServersArgs, reply *mainrpc.GetServersReply) error {
+	LOGV.Println("GetServers:")
 	ms.isReady.Lock()
 	defer ms.isReady.Unlock()
 	if !ms.isReady.ready {
@@ -237,6 +239,7 @@ func (ms *mainServer) GetServers(args *mainrpc.GetServersArgs, reply *mainrpc.Ge
 
 // SubmitAI takes in an AI go program and schedules them to
 func (ms *mainServer) SubmitAI(args *mainrpc.SubmitAIArgs, reply *mainrpc.SubmitAIReply) error {
+	LOGV.Println("SubmitAI")
 	retChan := make(chan bool)
 	req := &newAIReq{
 		name:     args.Name,
@@ -260,7 +263,11 @@ func (ms *mainServer) SubmitAI(args *mainrpc.SubmitAIArgs, reply *mainrpc.Submit
 // GetStandings returns the current standings of the different AIs
 // in the server.
 func (ms *mainServer) GetStandings(args *mainrpc.GetStandingsArgs, reply *mainrpc.GetStandingsReply) error {
+	LOGV.Println("GetStandings:")
 	retChan := make(chan mainrpc.Standings)
+
+	req := allStatsRequest{retChan}
+	ms.statsMaster.allReqChan <- req
 
 	reply.Standings = <-retChan
 	reply.Status = mainrpc.OK

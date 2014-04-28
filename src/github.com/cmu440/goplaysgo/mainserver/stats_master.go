@@ -74,7 +74,7 @@ func (sm *statsMaster) startStatsMaster() {
 
 			case res.Points1 == res.Points2:
 				sm.stats[res.Player1] = updateDraw(sm.stats[res.Player1], res)
-				sm.stats[res.Player1] = updateDraw(sm.stats[res.Player1], res)
+				sm.stats[res.Player2] = updateDraw(sm.stats[res.Player2], res)
 			}
 		}
 
