@@ -14,6 +14,7 @@ type goClient struct {
 
 // NewGoClient returns a client for the MainServer in GoPlaysGo
 func NewGoClient(hostname string, port int) (*goClient, error) {
+	println("Initializing Go Client for", hostname, port)
 	cli, err := rpc.DialHTTP("tcp", net.JoinHostPort(hostname, strconv.Itoa(port)))
 	if err != nil {
 		return nil, err
