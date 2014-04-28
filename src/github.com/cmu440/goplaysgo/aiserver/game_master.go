@@ -18,7 +18,7 @@ type checkReq struct {
 type initReq struct {
 	name     string
 	hostport string
-	size     gogame.Size
+	size     int
 	retChan  chan bool
 }
 
@@ -94,7 +94,7 @@ func (gm *gameMaster) startGameMaster() {
 	}
 }
 
-func (gm *gameMaster) initGame(name string, hostport string, size gogame.Size) *gameHandler {
+func (gm *gameMaster) initGame(name string, hostport string, size int) *gameHandler {
 	gh := new(gameHandler)
 	gh.name = gm.name
 	gh.opponent = name
@@ -168,8 +168,8 @@ func (gh *gameHandler) startGameHandler() {
 			result := mainrpc.GameResult{
 				Player1: gh.name,
 				Player2: gh.opponent,
-				Points1: gh.game.GetPoints(gogame.White),
-				Points2: gh.game.GetPoints(gogame.Black),
+				Points1: gh.game.PlayerPoints(gogame.White),
+				Points2: gh.game.PlayerPoints(gogame.Black),
 			}
 
 			req.retChan <- result

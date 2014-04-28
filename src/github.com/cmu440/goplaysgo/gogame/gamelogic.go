@@ -2,12 +2,10 @@ package gogame
 
 import "fmt"
 
-type Size int
-
 const (
-	Small  Size = 9
-	Medium Size = 13
-	Largs  Size = 19
+	Small  = 9
+	Medium = 13
+	Largs  = 19
 )
 
 type Player string
@@ -71,10 +69,10 @@ func MakeBoard(size int) Board {
 
 //isLegalMove - Checks the board's grid to see if the given x,y pos is safe to place
 func (bd *Board) isLegalMove(player Player, move Move) int {
-	if (move.YPos => len(bd.Grid)) || (move.YPos < 0) {
+	if (move.YPos >= len(bd.Grid)) || (move.YPos < 0) {
 		return 0
 	}
-	if (move.XPos => len(bd.Grid)) || (move.XPos < 0) {
+	if (move.XPos >= len(bd.Grid)) || (move.XPos < 0) {
 		return 0
 	}
 	TestStone := bd.Grid[move.YPos][move.XPos]
@@ -238,52 +236,49 @@ func (bd *Board) printBoard() {
 	fmt.Println(" ")
 }
 
-func (bd *Board) PlayerPoints(player Player) int{
-	BoardCopy := MakeBoard(size(bd.Grid))
-	BoardCopy.Trun = bd.Turn
+func (bd *Board) PlayerPoints(player Player) int {
+	BoardCopy := MakeBoard(len(bd.Grid))
+	BoardCopy.Turn = bd.Turn
 	BoardCopy.Grid = bd.Grid
 	Score := 0
 	for y := 0; y < len(bd.Grid); y++ {
-		for x :=0; x<len(bd.Grid); x++ {
+		for x := 0; x < len(bd.Grid); x++ {
 			if BoardCopy.Grid[y][x].Player == player {
-			if x > 0 {
-			TempStone := BoardCopy.Grid[y][x-1]
-			if TempStone.Player == "" {
-				TempStone.Player = "Taken"
-				Score++
-				BoardCopy.Grid[y][x-1] = TempStone
-			}
-		}
-		if x < len(BoardCopy.Grid)-1 {
-			TempStone := BoardCopy.Grid[y][x+1]
-			if TempStone.Player == "" {
-				TempStone.Player = "Taken"
-				Score++++
-				BoardCopy.Grid[y][x+1] = TempStone
-			}
-		}
-		if y > 0 {
-			TempStone := BoardCopy.Grid[y-1][xpos]
-			if TempStone.Player == "" {
-				TempStone.Player = "Taken"
-				Score++++
-				BoardCopy.Grid[y-1][x] = TempStone
-			}
-		}
-		if y < len(BoardCopy.Grid)-1 {
-			TempStone := BoardCopy.Grid[y+1][x]
-			if TempStone.Player == "" {
-				TempStone.Player = "Taken"
-				Score++++
-				BoardCopy.Grid[y+1][xpos] = TempStone
+				if x > 0 {
+					TempStone := BoardCopy.Grid[y][x-1]
+					if TempStone.Player == "" {
+						TempStone.Player = "Taken"
+						Score++
+						BoardCopy.Grid[y][x-1] = TempStone
+					}
+				}
+				if x < len(BoardCopy.Grid)-1 {
+					TempStone := BoardCopy.Grid[y][x+1]
+					if TempStone.Player == "" {
+						TempStone.Player = "Taken"
+						Score++
+						BoardCopy.Grid[y][x+1] = TempStone
+					}
+				}
+				if y > 0 {
+					TempStone := BoardCopy.Grid[y-1][x]
+					if TempStone.Player == "" {
+						TempStone.Player = "Taken"
+						Score++
+						BoardCopy.Grid[y-1][x] = TempStone
+					}
+				}
+				if y < len(BoardCopy.Grid)-1 {
+					TempStone := BoardCopy.Grid[y+1][x]
+					if TempStone.Player == "" {
+						TempStone.Player = "Taken"
+						Score++
+						BoardCopy.Grid[y+1][x] = TempStone
+					}
+				}
 			}
 		}
 	}
-		}
-	}
 
-}
-
-func (bd *Board) GetPoints(player Player) int {
-	return 0
+	return Score
 }
