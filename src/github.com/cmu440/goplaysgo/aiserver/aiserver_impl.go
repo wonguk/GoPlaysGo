@@ -1,23 +1,27 @@
 package aiserver
 
 import (
-	"io/ioutil"
+	//	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"net/rpc"
+	"os"
 	"strconv"
 
 	"github.com/cmu440/goplaysgo/rpc/airpc"
 	"github.com/cmu440/goplaysgo/rpc/mainrpc"
 )
 
+var logfile, _ = os.OpenFile("log/AITest.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+var errfile, _ = os.OpenFile("log/AITest.err", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+
 // Error Log
-var LOGE = log.New(ioutil.Discard, "ERROR [AIServer] ",
+var LOGE = log.New(errfile, "ERROR [AIServer] ",
 	log.Lmicroseconds|log.Lshortfile)
 
 // Verbose Log
-var LOGV = log.New(ioutil.Discard, "VERBOSE [AIServer] ",
+var LOGV = log.New(logfile, "VERBOSE [AIServer] ",
 	log.Lmicroseconds|log.Lshortfile)
 
 type aiServer struct {
@@ -29,6 +33,7 @@ type aiServer struct {
 
 // NewAIServer returns an AIServer that plays games with other AI Servers
 func NewAIServer(name string, port int, mainServerPort string) (AIServer, error) {
+	LOGV.Println("NewAIServer:", "Initializing AI Server for", name, "at", port)
 	as := new(aiServer)
 
 	as.name = name
@@ -55,6 +60,8 @@ func NewAIServer(name string, port int, mainServerPort string) (AIServer, error)
 
 	go http.Serve(l, nil)
 
+	LOGV.Println("NewAIServer:", "Done Initializing server for", name)
+
 	return as, nil
 }
 
@@ -75,6 +82,7 @@ func (as *aiServer) NextMove(args *airpc.NextMoveArgs, reply *airpc.NextMoveRepl
 }
 
 func (as *aiServer) CheckGame(args *airpc.CheckArgs, reply *airpc.CheckReply) error {
+	LOGV.Println("CheckGame:", "Checking Game Between", as.name, "and", args.Player)
 	retChan := make(chan bool)
 
 	req := checkReq{
@@ -94,6 +102,7 @@ func (as *aiServer) CheckGame(args *airpc.CheckArgs, reply *airpc.CheckReply) er
 }
 
 func (as *aiServer) InitGame(args *airpc.InitGameArgs, reply *airpc.InitGameReply) error {
+	LOGV.Println("InitGame:", "Initializing Game Between", as.name, "and", args.Player)
 	retChan := make(chan bool)
 
 	req := initReq{
@@ -112,6 +121,7 @@ func (as *aiServer) InitGame(args *airpc.InitGameArgs, reply *airpc.InitGameRepl
 }
 
 func (as *aiServer) StartGame(args *airpc.StartGameArgs, reply *airpc.StartGameReply) error {
+	LOGV.Println("StartGame:", "Starting Game Between", as.name, "and", args.Player)
 	//NOTE: The Player who starts the should make a WHITE Move
 	retChan := make(chan mainrpc.GameResult)
 

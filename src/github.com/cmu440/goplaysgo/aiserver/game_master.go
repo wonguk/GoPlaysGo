@@ -60,7 +60,7 @@ func (gm *gameMaster) startGameMaster() {
 		select {
 		case req := <-gm.checkChan:
 			_, ok := gm.games[req.name]
-			req.retChan <- ok
+			req.retChan <- !ok
 
 		case req := <-gm.initChan:
 			newGame := gm.initGame(req.name, req.hostport, req.size)
@@ -110,6 +110,7 @@ func (gh *gameHandler) startGameHandler() {
 	for {
 		select {
 		case req := <-gh.moveChan:
+			LOGV.Println("GameHandler:", "Move Request Recieved!")
 			//TODO Error Handling!
 			// Update current board to use the move specified
 			gh.game.MakeMove(gogame.White, req.args.Move)
@@ -127,17 +128,20 @@ func (gh *gameHandler) startGameHandler() {
 			req.replyChan <- req.reply
 
 		case req := <-gh.startChan:
+			LOGV.Println("GameHandler:", "Starting a Game Between", gh.name, "and", gh.opponent)
 			args := airpc.NextMoveArgs{}
 			args.Player = gh.name
 			var reply airpc.NextMoveReply
 
 			for {
 				if gh.game.IsDone() {
+					LOGV.Println("GameHandler:", "Game Done!!", gh.name, ",", gh.opponent)
 					break
 				}
 
 				// Make Move
 				nextMove := ai.NextMove(gh.game, gogame.White)
+				LOGV.Println("GameHandler:", gh.name, "made move", nextMove.XPos, nextMove.YPos)
 
 				// Update Current Board
 				gh.game.MakeMove(gogame.White, nextMove)
@@ -153,11 +157,13 @@ func (gh *gameHandler) startGameHandler() {
 				if err != nil {
 					LOGE.Println("GameHandler:", "RPC Error against", gh.opponent, err)
 				}
+				LOGV.Println("GameHandler:", gh.opponent, "made move", reply.Move.XPos, reply.Move.YPos)
 
 				// Update Board from reply
 				gh.game.MakeMove(gogame.Black, reply.Move)
 			}
 
+			LOGV.Println("GameHandler:", "Returning Result of Game between", gh.name, ",", gh.opponent)
 			// Return Game Result
 			result := mainrpc.GameResult{
 				Player1: gh.name,
