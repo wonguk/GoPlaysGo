@@ -238,6 +238,52 @@ func (bd *Board) printBoard() {
 	fmt.Println(" ")
 }
 
+func (bd *Board) PlayerPoints(player Player) int{
+	BoardCopy := MakeBoard(size(bd.Grid))
+	BoardCopy.Trun = bd.Turn
+	BoardCopy.Grid = bd.Grid
+	Score := 0
+	for y := 0; y < len(bd.Grid); y++ {
+		for x :=0; x<len(bd.Grid); x++ {
+			if BoardCopy.Grid[y][x].Player == player {
+			if x > 0 {
+			TempStone := BoardCopy.Grid[y][x-1]
+			if TempStone.Player == "" {
+				TempStone.Player = "Taken"
+				Score++
+				BoardCopy.Grid[y][x-1] = TempStone
+			}
+		}
+		if x < len(BoardCopy.Grid)-1 {
+			TempStone := BoardCopy.Grid[y][x+1]
+			if TempStone.Player == "" {
+				TempStone.Player = "Taken"
+				Score++++
+				BoardCopy.Grid[y][x+1] = TempStone
+			}
+		}
+		if y > 0 {
+			TempStone := BoardCopy.Grid[y-1][xpos]
+			if TempStone.Player == "" {
+				TempStone.Player = "Taken"
+				Score++++
+				BoardCopy.Grid[y-1][x] = TempStone
+			}
+		}
+		if y < len(BoardCopy.Grid)-1 {
+			TempStone := BoardCopy.Grid[y+1][x]
+			if TempStone.Player == "" {
+				TempStone.Player = "Taken"
+				Score++++
+				BoardCopy.Grid[y+1][xpos] = TempStone
+			}
+		}
+	}
+		}
+	}
+
+}
+
 func (bd *Board) GetPoints(player Player) int {
 	return 0
 }
