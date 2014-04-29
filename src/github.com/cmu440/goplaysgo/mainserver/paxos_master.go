@@ -130,6 +130,7 @@ func (pm *paxosMaster) startPaxosMaster(statsChan chan paxosrpc.Command) {
 				prevDone, ok := pm.cmdDone[cmd.CommandNumber-1]
 
 				if !ok {
+					LOGV.Println("PaxosMaster:", "Initializing Prev Step", cmd.CommandNumber-1)
 					prevDone = make(chan struct{})
 					pm.cmdDone[cmd.CommandNumber-1] = prevDone
 
@@ -192,6 +193,8 @@ func (ph *paxosHandler) prepare(cmdChan chan paxosrpc.Command,
 		go rpcHandler(call, prepareChan)
 	}
 
+	maxCmd := 0
+
 	for i := 0; i < len(servers); i++ {
 		call := <-prepareChan
 
@@ -211,14 +214,12 @@ func (ph *paxosHandler) prepare(cmdChan chan paxosrpc.Command,
 		case paxosrpc.Reject:
 			if reply.Command.CommandNumber == ph.command.CommandNumber {
 				cmtChan <- reply.Command
+				return false
 			}
-			if reply.MaxCmdNum > ph.command.CommandNumber {
-				ph.command.CommandNumber = reply.MaxCmdNum + 1
-			} else {
-				ph.command.CommandNumber++
+
+			if reply.MaxCmdNum > maxCmd {
+				maxCmd = reply.MaxCmdNum
 			}
-			cmdChan <- ph.command
-			return false
 
 		default:
 			continue
@@ -227,7 +228,9 @@ func (ph *paxosHandler) prepare(cmdChan chan paxosrpc.Command,
 
 	// If not enough OKs, resend command to master
 	if numPrepare < len(servers)/2 {
-		ph.command.CommandNumber++
+		if ph.command.Type != paxosrpc.NOP {
+			ph.command.CommandNumber = maxCmd + 1
+		}
 		cmdChan <- ph.command
 		return false
 	}

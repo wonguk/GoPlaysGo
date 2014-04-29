@@ -24,6 +24,16 @@ func NewGoClient(hostname string, port int) (*goClient, error) {
 	return &goClient{client: cli}, nil
 }
 
+func NewGoClientHP(hostport string) (*goClient, error) {
+	println("Initializing Go Client for", hostport)
+	cli, err := rpc.DialHTTP("tcp", hostport)
+	if err != nil {
+		return nil, err
+	}
+
+	return &goClient{client: cli}, nil
+}
+
 func (gc *goClient) SubmitAI(name string, path string) (mainrpc.SubmitAIReply, error) {
 	var reply mainrpc.SubmitAIReply
 
