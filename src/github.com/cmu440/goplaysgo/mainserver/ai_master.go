@@ -27,7 +27,7 @@ type newAIReq struct {
 	code     []byte
 	manage   bool
 	hostport string
-	retChan  chan bool
+	retChan  chan mainrpc.Status
 }
 
 type getAIsReq struct {
@@ -49,7 +49,7 @@ func (am *aiMaster) startAIMaster(initChan chan initRequest, addChan chan mainrp
 
 			if ok {
 				LOGV.Println("AIMaster:", newAI.name, "Already Exists")
-				newAI.retChan <- false
+				newAI.retChan <- mainrpc.AIExists
 				continue
 			}
 
@@ -66,7 +66,7 @@ func (am *aiMaster) startAIMaster(initChan chan initRequest, addChan chan mainrp
 				hostport, err := newInfo.initAI()
 
 				if err != nil {
-					newAI.retChan <- false
+					newAI.retChan <- mainrpc.CompileError
 				} else {
 					newInfo.hostport = hostport
 					newInfo.client = dialHTTP(hostport)
@@ -131,12 +131,12 @@ func (ai *aiInfo) initAI() (string, error) {
 	}
 }
 
-func (ai *aiInfo) testAI(done chan struct{}, retChan chan bool,
+func (ai *aiInfo) testAI(done chan struct{}, retChan chan mainrpc.Status,
 	resultChan chan mainrpc.GameResult, getAIChan chan *getAIsReq) {
 
 	// Wait until StatsMaster has confirmed that AI initialized
 	<-done
-	retChan <- true
+	retChan <- mainrpc.OK
 
 	// Get Latest AIs from AIMaster
 	aiReq := &getAIsReq{make(chan []*aiInfo)}

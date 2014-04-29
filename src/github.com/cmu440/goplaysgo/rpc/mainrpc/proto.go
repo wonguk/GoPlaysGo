@@ -9,6 +9,7 @@ const (
 	NotReady
 	WrongServer
 	AIExists
+	CompileError
 )
 
 //TODO: Timing constraints for main server?

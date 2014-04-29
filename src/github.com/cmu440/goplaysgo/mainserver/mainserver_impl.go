@@ -291,7 +291,7 @@ func (ms *mainServer) SubmitAI(args *mainrpc.SubmitAIArgs, reply *mainrpc.Submit
 	}
 	ms.isReady.Unlock()
 
-	retChan := make(chan bool)
+	retChan := make(chan mainrpc.Status)
 	req := &newAIReq{
 		name:     args.Name,
 		code:     args.Code,
@@ -302,11 +302,7 @@ func (ms *mainServer) SubmitAI(args *mainrpc.SubmitAIArgs, reply *mainrpc.Submit
 
 	ms.aiMaster.aiChan <- req
 
-	if <-retChan {
-		reply.Status = mainrpc.OK
-	} else {
-		reply.Status = mainrpc.AIExists
-	}
+	reply.Status = <-retChan
 
 	return nil
 }
