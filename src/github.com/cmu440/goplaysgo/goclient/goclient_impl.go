@@ -1,11 +1,12 @@
 package goclient
 
 import (
-	"github.com/cmu440/goplaysgo/rpc/mainrpc"
 	"io/ioutil"
 	"net"
 	"net/rpc"
 	"strconv"
+
+	"github.com/cmu440/goplaysgo/rpc/mainrpc"
 )
 
 type goClient struct {
