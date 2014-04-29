@@ -45,8 +45,10 @@ func (sm *statsMaster) startStatsMaster(cmdChan chan paxosrpc.Command,
 		case req := <-sm.allReqChan:
 			stats := make([]mainrpc.Stats, len(sm.stats))
 
+			i := 0
 			for _, s := range sm.stats {
-				stats = append(stats, s)
+				stats[i] = s
+				i++
 			}
 
 			req.retChan <- stats
