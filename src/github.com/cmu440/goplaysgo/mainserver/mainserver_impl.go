@@ -259,13 +259,6 @@ func (ms *mainServer) getServers() []string {
 	return servers
 }
 
-// RegisterReferee will add a given referee to the pool of referees
-// TODO Need to decide how to spawn/handle referees
-func (ms *mainServer) RegisterReferee(*mainrpc.RegisterRefArgs, *mainrpc.RegisterRefReply) error {
-
-	return errors.New("not implemented")
-}
-
 // GetServers returns a list of all main servers that are curently
 // connected in the paxos ring
 func (ms *mainServer) GetServers(args *mainrpc.GetServersArgs, reply *mainrpc.GetServersReply) error {

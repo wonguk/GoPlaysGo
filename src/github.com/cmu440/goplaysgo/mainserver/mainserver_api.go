@@ -9,10 +9,6 @@ type MainServer interface {
 	// which will wait for all the main servers to connect
 	RegisterServer(*mainrpc.RegisterArgs, *mainrpc.RegisterReply) error
 
-	// RegisterReferee will add a given referee to the pool of referees
-	// TODO Need to decide how to spawn/handle referees
-	RegisterReferee(*mainrpc.RegisterRefArgs, *mainrpc.RegisterRefReply) error
-
 	// GetServers returns a list of all main servers that are curently
 	// connected in the paxos ring
 	GetServers(*mainrpc.GetServersArgs, *mainrpc.GetServersReply) error
@@ -23,7 +19,4 @@ type MainServer interface {
 	// GetStandings returns the current standings of the different AIs
 	// in the server.
 	GetStandings(*mainrpc.GetStandingsArgs, *mainrpc.GetStandingsReply) error
-
-	// TODO: Decide whether or not the RefereeServer should make a rpc
-	// call to the MainServer to return results of a game.
 }

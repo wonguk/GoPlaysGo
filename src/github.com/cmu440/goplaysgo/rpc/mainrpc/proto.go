@@ -58,16 +58,6 @@ type GetServersReply struct {
 	Servers []string
 }
 
-// RegisterRefArgs registers the referee server (DEPRECATED)
-type RegisterRefArgs struct {
-	Hostport string
-}
-
-// RegisterRefReply returns the result of adding the ref (DEPRECATED)
-type RegisterRefReply struct {
-	Status Status
-}
-
 // SubmitAIArgs has the AI name and the code that is submitted
 type SubmitAIArgs struct {
 	Name string
