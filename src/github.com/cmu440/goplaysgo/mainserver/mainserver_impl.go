@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
-	//"os"
 	"strconv"
 	"sync"
 	"time"
@@ -160,11 +159,12 @@ func (ms *mainServer) startMasters() {
 	paxosMaster.n = 0
 	paxosMaster.maxCmdNum = 0
 	paxosMaster.commands = make(map[int]paxosrpc.Command)
-	paxosMaster.cmdDone = make(map[int]chan struct{})
-	paxosMaster.commandChan = make(chan paxosrpc.Command, 100)
-	paxosMaster.prepareChan = make(chan prepRequest, 100)
-	paxosMaster.acceptChan = make(chan acceptRequest, 100)
-	paxosMaster.commitChan = make(chan paxosrpc.Command, 100)
+	paxosMaster.cmdDone = make(map[int]chan bool)
+	paxosMaster.nChan = make(chan int, 1000)
+	paxosMaster.commandChan = make(chan paxosrpc.Command, 1000)
+	paxosMaster.prepareChan = make(chan prepRequest, 1000)
+	paxosMaster.acceptChan = make(chan acceptRequest, 1000)
+	paxosMaster.commitChan = make(chan paxosrpc.Command, 1000)
 	paxosMaster.servers = make([]node, len(ms.servers)-1)
 
 	// Don't include self in the list of servers
@@ -178,18 +178,18 @@ func (ms *mainServer) startMasters() {
 
 	// Initialize StatsMaster
 	statsMaster := new(statsMaster)
-	statsMaster.reqChan = make(chan statsRequest)
-	statsMaster.allReqChan = make(chan allStatsRequest)
-	statsMaster.initChan = make(chan initRequest)
-	statsMaster.addChan = make(chan mainrpc.GameResult)
-	statsMaster.commitChan = make(chan paxosrpc.Command)
+	statsMaster.reqChan = make(chan statsRequest, 1000)
+	statsMaster.allReqChan = make(chan allStatsRequest, 1000)
+	statsMaster.initChan = make(chan initRequest, 1000)
+	statsMaster.addChan = make(chan mainrpc.GameResult, 1000)
+	statsMaster.commitChan = make(chan paxosrpc.Command, 1000)
 	statsMaster.stats = make(map[string]mainrpc.Stats)
 	statsMaster.toRun = make(map[string]chan struct{})
 
 	// Initialize AIMaster
 	aiMaster := new(aiMaster)
-	aiMaster.aiChan = make(chan *newAIReq)
-	aiMaster.getChan = make(chan *getAIsReq)
+	aiMaster.aiChan = make(chan *newAIReq, 1000)
+	aiMaster.getChan = make(chan *getAIsReq, 1000)
 	aiMaster.aiClients = make(map[string]*aiInfo)
 
 	// Start Masters
@@ -264,10 +264,11 @@ func (ms *mainServer) getServers() []string {
 func (ms *mainServer) GetServers(args *mainrpc.GetServersArgs, reply *mainrpc.GetServersReply) error {
 	LOGV.Println("GetServers:")
 	ms.isReady.Lock()
-	defer ms.isReady.Unlock()
 	if !ms.isReady.ready {
+		ms.isReady.Unlock()
 		reply.Status = mainrpc.NotReady
 	} else {
+		ms.isReady.Unlock()
 		reply.Status = mainrpc.OK
 		reply.Servers = ms.getServers()
 	}
