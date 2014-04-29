@@ -5,7 +5,9 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net/rpc"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -94,7 +96,9 @@ func (am *aiMaster) startAIMaster(initChan chan initRequest, addChan chan mainrp
 func (ai *aiInfo) initAI() (string, error) {
 	LOGV.Println("AIMaster:", "Initializing AI", ai.name)
 	// Use cmd line to compile and run AIServer
-	err := ioutil.WriteFile("src/github.com/cmu440/goplaysgo/ai/ai_impl.go", ai.code, 0666)
+	gopath := os.Getenv("GOPATH")
+	aiPath := gopath + filepath.FromSlash("/src/github.com/cmu440/goplaysgo/ai/ai_impl.go")
+	err := ioutil.WriteFile(aiPath, ai.code, 0666)
 
 	if err != nil {
 		LOGE.Println("AIMaster:", "Failed to write AI", ai.name, err)
@@ -116,7 +120,8 @@ func (ai *aiInfo) initAI() (string, error) {
 		port := r.Intn(10000) + 10000
 		LOGV.Println("AIMaster:", "Starting AIServer", ai.name, "at", port)
 
-		run := exec.Command("bin/airunner", "-name", ai.name,
+		runnerPath := gopath + filepath.FromSlash("/bin/airunner")
+		run := exec.Command(runnerPath, "-name", ai.name,
 			"-port", strconv.Itoa(port))
 		err = run.Start()
 
