@@ -1,4 +1,4 @@
-package ai6
+package ai
 
 import (
 	"math/rand"

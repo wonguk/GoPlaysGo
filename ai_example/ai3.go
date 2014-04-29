@@ -1,4 +1,4 @@
-package ai3
+package ai
 
 import (
 	"math/rand"

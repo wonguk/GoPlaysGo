@@ -1,4 +1,4 @@
-package ai2
+package ai
 
 import (
 	"github.com/cmu440/goplays/gogame"
