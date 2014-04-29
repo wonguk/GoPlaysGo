@@ -91,9 +91,12 @@ func initClients() []goclient.GoClient {
 			}
 
 			return s
+		} else if err != nil {
+			LOGE.Println("GoClient Error:", err)
+			os.Exit(-1)
 		}
 
-		time.Sleep(time.Second)
+		time.Sleep(time.Second * 2)
 	}
 }
 func checkStandings(c goclient.GoClient) {
@@ -174,7 +177,7 @@ func testDuplicateSingle() {
 	}
 
 	if reply.Status != mainrpc.AIExists {
-		LOGE.Println("There are Duplicate AIs in Server")
+		LOGE.Println("There are Duplicate AIs in Server", reply.Status)
 		failCount++
 		return
 	}

@@ -20,12 +20,12 @@ if [ $? -ne 0 ]; then
 fi
 
 
-# Pick random port between [10000, 20000).
-MASTER_PORT=$(((RANDOM % 10000) + 10000))
+# Pick random port between [10000, 30000).
 MAIN_SERVER=$GOPATH/bin/mrunner
 MAIN_TEST=$GOPATH/bin/maintest
 
 function startMainServers {
+    MASTER_PORT=$(((RANDOM % 10000) + 20000))
     N=${#STORAGE_ID[@]}
     # Start master storage server.
     ${MAIN_SERVER} -N=${N} -port=${MASTER_PORT} 2> /dev/null &
@@ -40,7 +40,7 @@ function startMainServers {
             MAIN_SERVER_PID[$i]=$!
         done
     fi
-    sleep 5
+    sleep 10
 }
 
 function stopMainServers {
@@ -50,28 +50,6 @@ function stopMainServers {
         kill -9 ${MAIN_SERVER_PID[$i]}
         wait ${MAIN_SERVER_PID[$i]} 2> /dev/null
     done
-}
-
-function testRouting {
-    startMainServers
-    for KEY in "${KEYS[@]}"
-    do
-        ${MAIN_TEST} -port=${STORAGE_PORT} p ${KEY} value > /dev/null
-        PASS=`${LRUNNER} -port=${STORAGE_PORT} g ${KEY} | grep value | wc -l`
-        if [ "$PASS" -ne 1 ]
-        then
-            break
-        fi
-    done
-    if [ "$PASS" -eq 1 ]
-    then
-        echo "PASS"
-        PASS_COUNT=$((PASS_COUNT + 1))
-    else
-        echo "FAIL"
-        FAIL_COUNT=$((FAIL_COUNT + 1))
-    fi
-    stopStorageServers
 }
 
 # Testing Single Server
@@ -99,7 +77,20 @@ function testMany {
   stopMainServers
 }
 
+function testManyKill {
+  echo "Running Many with Kill:"
+  STORAGE_ID=('1', '2', '3', '4', '5')
+  startMainServers
+  sleep 10 && kill ${MAIN_SERVER_PID[2]} & 
+  sleep 15 && kill ${MAIN_SERVER_PID[4]} & 
+  ${MAIN_TEST} -port="localhost:${MASTER_PORT}"
+  stopMainServers
+}
+
+
+
 # Run tests.
-#testSingle
+testSingle
 testTriple
 testMany
+testManyKill
