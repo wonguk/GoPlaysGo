@@ -2,12 +2,12 @@ package mainserver
 
 import (
 	"errors"
-	//"io/ioutil"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"net/rpc"
-	"os"
+	//"os"
 	"strconv"
 	"sync"
 	"time"
@@ -17,11 +17,11 @@ import (
 )
 
 // Error Log
-var LOGE = log.New(os.Stdout, "ERROR [MainServer] ",
+var LOGE = log.New(ioutil.Discard, "ERROR [MainServer] ",
 	log.Lmicroseconds|log.Lshortfile)
 
 // Verbose Log
-var LOGV = log.New(os.Stdout, "VERBOSE [MainServer] ",
+var LOGV = log.New(ioutil.Discard, "VERBOSE [MainServer] ",
 	log.Lmicroseconds|log.Lshortfile)
 
 type isReady struct {

@@ -45,6 +45,8 @@ var (
 
 var LOGE = log.New(os.Stderr, "", log.Lshortfile|log.Lmicroseconds)
 
+var master = flag.String("port", "localhost:9099", "Hostport of master server")
+
 func main() {
 	tests := []testFunc{
 		{"testNormalSingle", testNormalSingle},
@@ -53,7 +55,7 @@ func main() {
 		{"testDuplicateMultiple", testDuplicateMultiple},
 	}
 
-	flag.Var(&hps, "port", "List of Hosts")
+	flag.Var(&hps, "ports", "List of Hosts")
 	flag.Parse()
 
 	mt = new(mainTester)
@@ -68,19 +70,32 @@ func main() {
 }
 
 func initClients() []goclient.GoClient {
-	s := make([]goclient.GoClient, len(hps))
+	c, err := goclient.NewGoClientHP(*master)
 
-	for i, h := range hps {
-		c, err := goclient.NewGoClientHP(h)
-		if err != nil {
-			os.Exit(-1)
-		}
-		s[i] = c
+	if err != nil {
+		os.Exit(-1)
 	}
 
-	return s
-}
+	for {
+		reply, err := c.GetServers()
 
+		if err == nil && reply.Status == mainrpc.OK {
+			s := make([]goclient.GoClient, len(reply.Servers))
+
+			for i, h := range reply.Servers {
+				c, err := goclient.NewGoClientHP(h)
+				if err != nil {
+					os.Exit(-1)
+				}
+				s[i] = c
+			}
+
+			return s
+		}
+
+		time.Sleep(time.Second)
+	}
+}
 func checkStandings(c goclient.GoClient) {
 	r, err := c.GetStandings()
 
