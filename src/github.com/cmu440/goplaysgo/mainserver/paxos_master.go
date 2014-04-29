@@ -49,16 +49,19 @@ type commitHandler struct {
 
 func (pm *paxosMaster) startPaxosMaster(statsChan chan paxosrpc.Command) {
 	// Mark Initial command as done (so first command can run)
+	LOGV.Println("PaxosMaster:", "Starting Paxos Master!")
 	pm.cmdDone[0] = make(chan struct{})
 	close(pm.cmdDone[0])
 
 	for {
 		select {
 		case c := <-pm.commandChan:
+			LOGV.Println("PaxosMaster:", "Recieved Command", c.CommandNumber, c.Type)
 			pm.n++
 
 			if c.CommandNumber == -1 {
 				pm.maxCmdNum++
+				LOGV.Println("PaxosMaster:", "Giving CmdNum", pm.maxCmdNum)
 				c.CommandNumber = pm.maxCmdNum
 			}
 
@@ -69,15 +72,19 @@ func (pm *paxosMaster) startPaxosMaster(statsChan chan paxosrpc.Command) {
 			go ph.startHandler(pm.commandChan, pm.commitChan, pm.servers)
 
 		case p := <-pm.prepareChan:
+			LOGV.Println("PaxosMaster:", "Recieved Prepare", p.n)
 			if p.n < pm.n {
+				LOGV.Println("PaxosMaster:", "Rejecting Due to Low n", p.n, pm.n)
 				p.reply.Status = paxosrpc.Reject
 				p.reply.N = pm.n
 			} else if last, ok := pm.commands[p.cmdNum]; ok {
+				LOGV.Println("PaxosMaster:", "Rejecting Due to Past Commit", p.cmdNum)
 				p.reply.Status = paxosrpc.Reject
 				p.reply.Command = last
 				p.reply.MaxCmdNum = pm.maxCmdNum
 				pm.n = p.n
 			} else {
+				LOGV.Println("PaxosMaster:", "Accepting Prepare", p.n)
 				p.reply.Status = paxosrpc.OK
 				pm.n = p.n
 			}
@@ -85,21 +92,29 @@ func (pm *paxosMaster) startPaxosMaster(statsChan chan paxosrpc.Command) {
 			close(p.retChan)
 
 		case a := <-pm.acceptChan:
+			LOGV.Println("PaxosMAster:", "Recieved Accept", a.n)
 			if a.n != pm.n {
+				LOGV.Println("PaxosMaster:", "Rejecting due to Wrong n", a.n, pm.n)
 				a.reply.Status = paxosrpc.Reject
 			} else {
+				LOGV.Println("PaxosMaster:", "Accepting Accept", a.n, a.command)
 				a.reply.Status = paxosrpc.OK
+				LOGV.Println("PaxosMaster:", "ZXCZXCZXAccepting Accept", a.n, a.command)
 				pm.commitChan <- a.command
+				LOGV.Println("PaxosMaster:", "ASDASDAccepting Accept", a.n, a.command)
 			}
 
+			LOGV.Println("PaxosMaster:", "QWEQWEAccepting Accept", a.n, a.command)
 			close(a.retChan)
 
 		case cmd := <-pm.commitChan:
+			LOGV.Println("PaxosMaster:", "Recieved Commit", cmd)
 			if cmd.CommandNumber > pm.maxCmdNum {
 				pm.maxCmdNum = cmd.CommandNumber
 			}
 
 			if _, ok := pm.commands[cmd.CommandNumber]; !ok {
+				LOGV.Println("PaxosMaster:", "Updaing Command!")
 				//Check Prev Commands filled up
 
 				pm.commands[cmd.CommandNumber] = cmd
@@ -144,16 +159,21 @@ func (ch *commitHandler) startHandler(done chan struct{}, commitChan chan paxosr
 func (ph *paxosHandler) startHandler(cmdChan chan paxosrpc.Command,
 	cmtChan chan paxosrpc.Command, servers []node) {
 	//Prepare Phase
+	LOGV.Println("PaxosHandler:", "Sending Prepare Messages")
 	if !ph.prepare(cmdChan, cmtChan, servers) {
+		LOGE.Println("PaxosHandler:", "Failed To Prepare Message", ph.command)
 		return
 	}
 
 	//Accept Phase
+	LOGV.Println("PaxosHandler:", "Sending Accept Messages")
 	if !ph.accept(cmdChan, servers) {
+		LOGE.Println("PaxosHandler:", "Failed To Accept Message", ph.command)
 		return
 	}
 
 	//Commit Phase
+	LOGV.Println("PaxosHandler:", "Sending Commit Messages")
 	ph.commit(cmtChan, servers)
 }
 

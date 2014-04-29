@@ -81,6 +81,7 @@ func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer,
 	rpc.RegisterName("MainServer", ms)
 	rpc.RegisterName("PaxosServer", ms)
 	rpc.HandleHTTP()
+
 	l, e := net.Listen("tcp", ":"+strconv.Itoa(port))
 	if e != nil {
 		LOGE.Println("Error Listening to port", port, e)
@@ -145,6 +146,7 @@ func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer,
 		}
 
 		LOGV.Println("Slave:", port, "sleeping for 1 second")
+		LOGV.Println("Slave:", port, "Master Status", reply.Status)
 		time.Sleep(time.Second)
 	}
 
@@ -159,10 +161,10 @@ func (ms *mainServer) startMasters() {
 	paxosMaster.maxCmdNum = 0
 	paxosMaster.commands = make(map[int]paxosrpc.Command)
 	paxosMaster.cmdDone = make(map[int]chan struct{})
-	paxosMaster.commandChan = make(chan paxosrpc.Command)
-	paxosMaster.prepareChan = make(chan prepRequest)
-	paxosMaster.acceptChan = make(chan acceptRequest)
-	paxosMaster.commitChan = make(chan paxosrpc.Command)
+	paxosMaster.commandChan = make(chan paxosrpc.Command, 100)
+	paxosMaster.prepareChan = make(chan prepRequest, 100)
+	paxosMaster.acceptChan = make(chan acceptRequest, 100)
+	paxosMaster.commitChan = make(chan paxosrpc.Command, 100)
 	paxosMaster.servers = make([]node, len(ms.servers)-1)
 
 	// Don't include self in the list of servers
@@ -220,6 +222,8 @@ func (ms *mainServer) RegisterServer(args *mainrpc.RegisterArgs, reply *mainrpc.
 			args.Hostport)
 		reply.Status = mainrpc.OK
 		reply.Servers = ms.getServers()
+
+		return nil
 	}
 
 	for _, node := range ms.servers {
@@ -334,6 +338,7 @@ func (ms *mainServer) GetStandings(args *mainrpc.GetStandingsArgs, reply *mainrp
 
 // Prepare is the rpc called when a MainServer wants to propose(?) a command
 func (ms *mainServer) Prepare(args *paxosrpc.PrepareArgs, reply *paxosrpc.PrepareReply) error {
+	LOGV.Println("Prepare:", "Recived Prepare Request")
 	ms.isReady.Lock()
 	if !ms.isReady.ready {
 		ms.isReady.Unlock()
@@ -350,14 +355,17 @@ func (ms *mainServer) Prepare(args *paxosrpc.PrepareArgs, reply *paxosrpc.Prepar
 		retChan: make(chan struct{}),
 	}
 
+	LOGV.Println("Prepare:", "Sending Request to PaxosMaster")
 	ms.paxosMaster.prepareChan <- req
 	<-req.retChan
+	LOGV.Println("Prepare:", "returning")
 
 	return nil
 }
 
 // Accept is the rpc called once a majority agreed to the Prepare Call
 func (ms *mainServer) Accept(args *paxosrpc.AcceptArgs, reply *paxosrpc.AcceptReply) error {
+	LOGV.Println("MainServer:", "Recived Accept Request")
 	ms.isReady.Lock()
 	if !ms.isReady.ready {
 		ms.isReady.Unlock()
@@ -374,14 +382,17 @@ func (ms *mainServer) Accept(args *paxosrpc.AcceptArgs, reply *paxosrpc.AcceptRe
 		retChan: make(chan struct{}),
 	}
 
+	LOGV.Println("Accept:", "Sending Request to PaxosMaster")
 	ms.paxosMaster.acceptChan <- req
 	<-req.retChan
+	LOGV.Println("Accept:", "returning")
 
 	return nil
 }
 
 // Commit is the rpc called once the command has been accepted by the majority
 func (ms *mainServer) Commit(args *paxosrpc.CommitArgs, reply *paxosrpc.CommitReply) error {
+	LOGV.Println("MainServer:", "Recived Commit Request")
 	ms.isReady.Lock()
 	if !ms.isReady.ready {
 		ms.isReady.Unlock()
@@ -391,7 +402,9 @@ func (ms *mainServer) Commit(args *paxosrpc.CommitArgs, reply *paxosrpc.CommitRe
 	}
 	ms.isReady.Unlock()
 
+	LOGV.Println("Commit:", "Sending Request to PaxosMaster")
 	ms.paxosMaster.commitChan <- args.Command
+	LOGV.Println("Commit:", "returning")
 
 	reply.Status = paxosrpc.OK
 
@@ -399,17 +412,21 @@ func (ms *mainServer) Commit(args *paxosrpc.CommitArgs, reply *paxosrpc.CommitRe
 }
 
 func (ms *mainServer) initClients() {
-	for _, n := range ms.servers {
+	LOGV.Println("InitClients:", "initializing clients", ms.servers)
+	for i, n := range ms.servers {
 		if n.hostport != ms.hostport {
-			n.client = dialHTTP(n.hostport)
+			ms.servers[i].client = dialHTTP(n.hostport)
 		}
 	}
+	LOGV.Println("InitClients:", "initializing clients", ms.servers)
 }
 
 func dialHTTP(hostport string) *rpc.Client {
-	client, err := rpc.DialHTTP("tpc", hostport)
+	LOGV.Println("Dialing", hostport)
+	client, err := rpc.DialHTTP("tcp", hostport)
 
 	for err != nil {
+		LOGV.Println("Dialing", hostport, err)
 		time.Sleep(time.Second)
 		client, err = rpc.DialHTTP("tcp", hostport)
 	}
