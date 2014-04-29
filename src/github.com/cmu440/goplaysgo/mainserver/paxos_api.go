@@ -1,5 +1,7 @@
 package mainserver
 
+import "github.com/cmu440/goplaysgo/rpc/paxosrpc"
+
 // PaxosServer will be used in a mainserver so multiple mainservers can
 // keep their StatsMasters in sync
 type PaxosServer interface {

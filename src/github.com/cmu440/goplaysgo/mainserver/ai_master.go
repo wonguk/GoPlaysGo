@@ -30,8 +30,13 @@ type newAIReq struct {
 	retChan  chan bool
 }
 
+type getAIsReq struct {
+	retChan chan []*aiInfo
+}
+
 type aiMaster struct {
 	aiChan    chan *newAIReq
+	getChan   chan *getAIsReq
 	aiClients map[string]*aiInfo
 }
 
@@ -48,22 +53,16 @@ func (am *aiMaster) startAIMaster(initChan chan initRequest, addChan chan mainrp
 				continue
 			}
 
-			//TODO PAXOS TO ADD AI
-
 			newInfo := new(aiInfo)
 			newInfo.name = newAI.name
 			newInfo.code = newAI.code
 			newInfo.manage = newAI.manage
+
 			if !newInfo.manage {
 				newInfo.hostport = newAI.hostport
 				newInfo.client = dialHTTP(newAI.hostport)
 				am.aiClients[newAI.name] = newInfo
 			} else {
-				//TODO: if this mainserver manages the AI, we must:
-				//      1) start up the AI (if fail, retChan<-fail)
-				//      1b) Paxos and let others know
-				//      2) match the AI with all the existing AIs
-				//      3) update the Stats on the go
 				hostport, err := newInfo.initAI()
 
 				if err != nil {
@@ -71,21 +70,30 @@ func (am *aiMaster) startAIMaster(initChan chan initRequest, addChan chan mainrp
 				} else {
 					newInfo.hostport = hostport
 					newInfo.client = dialHTTP(hostport)
-					am.aiClients[newAI.name] = newInfo
-					newAI.retChan <- true
-					initChan <- initRequest{newAI.name, hostport}
-					go newInfo.testAI(addChan, am.aiClients)
+
+					done := make(chan struct{})
+					initChan <- initRequest{newAI.name, hostport, done}
+
+					go newInfo.testAI(done, newAI.retChan, addChan, am.getChan)
 				}
 			}
+		case req := <-am.getChan:
+			ais := make([]*aiInfo, len(am.aiClients))
+
+			i := 0
+			for _, ai := range am.aiClients {
+				ais[i] = ai
+				i++
+			}
+
+			req.retChan <- ais
 		}
 	}
 }
 
 func (ai *aiInfo) initAI() (string, error) {
 	LOGV.Println("AIMaster:", "Initializing AI", ai.name)
-	//TODO use cmd line to compile and run ai
-	// go install github.com/cmu440/goplaysgo/runners/airunner
-	// $GOPATH/bin/airunner -port
+	// Use cmd line to compile and run AIServer
 	err := ioutil.WriteFile("src/github.com/cmu440/goplaysgo/ai/ai_impl.go", ai.code, 0666)
 
 	if err != nil {
@@ -123,8 +131,19 @@ func (ai *aiInfo) initAI() (string, error) {
 	}
 }
 
-func (ai *aiInfo) testAI(resultChan chan mainrpc.GameResult,
-	aiClients map[string]*aiInfo) {
+func (ai *aiInfo) testAI(done chan struct{}, retChan chan bool,
+	resultChan chan mainrpc.GameResult, getAIChan chan *getAIsReq) {
+
+	// Wait until StatsMaster has confirmed that AI initialized
+	<-done
+	retChan <- true
+
+	// Get Latest AIs from AIMaster
+	aiReq := &getAIsReq{make(chan []*aiInfo)}
+	getAIChan <- aiReq
+	aiClients := <-aiReq.retChan
+
+	// Initialize RPC Arguments and Replies
 	LOGV.Println("AIMaster:", "Starting tests for", ai.name)
 	checkArgs := airpc.CheckArgs{}
 	oppCheckArgs := airpc.CheckArgs{ai.name}
@@ -144,6 +163,7 @@ func (ai *aiInfo) testAI(resultChan chan mainrpc.GameResult,
 
 	startArgs := airpc.StartGameArgs{}
 
+	// For each AI, run
 	for _, opp := range aiClients {
 		if opp.name == ai.name {
 			continue
@@ -155,9 +175,7 @@ func (ai *aiInfo) testAI(resultChan chan mainrpc.GameResult,
 		//2PC between the two AIs to test
 		LOGV.Println("AIMaster:", "Checking AI Server Statuses for", ai.name, "and", opp.name)
 		err1 := ai.client.Call("AIServer.CheckGame", &checkArgs, &checkReply)
-		LOGV.Println("AIMaster:", "Checking AI Server Statuses for", ai.name, "and", opp.name)
 		err2 := opp.client.Call("AIServer.CheckGame", &oppCheckArgs, &oppCheckReply)
-		LOGV.Println("AIMaster:", "Checking AI Server Statuses for", ai.name, "and", opp.name)
 
 		if err1 != nil || err2 != nil {
 			LOGE.Println("testAI:", "failed to match up", ai.name,
@@ -191,8 +209,6 @@ func (ai *aiInfo) testAI(resultChan chan mainrpc.GameResult,
 }
 
 func handleGameResult(call *rpc.Call, resultChan chan mainrpc.GameResult) {
-	//TODO A Heartbeat to check if the AIs are still alive
-
 	LOGV.Println("AIMaster:", "Waiting for match to end")
 	// Wait for the Call to be done
 	call = <-call.Done
@@ -201,7 +217,6 @@ func handleGameResult(call *rpc.Call, resultChan chan mainrpc.GameResult) {
 
 	reply := call.Reply.(*airpc.StartGameReply)
 
-	//TODO Error Handling
 	if call.Error != nil {
 		LOGE.Println("AIMaster:", "failed to complete game", call.Error)
 		return

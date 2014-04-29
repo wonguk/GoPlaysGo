@@ -2,6 +2,7 @@ package mainserver
 
 import (
 	"github.com/cmu440/goplaysgo/rpc/mainrpc"
+	"github.com/cmu440/goplaysgo/rpc/paxosrpc"
 )
 
 type statsRequest struct {
@@ -16,6 +17,8 @@ type allStatsRequest struct {
 type initRequest struct {
 	name     string
 	hostport string
+
+	done chan struct{}
 }
 
 type statsMaster struct {
@@ -25,10 +28,14 @@ type statsMaster struct {
 	initChan chan initRequest
 	addChan  chan mainrpc.GameResult
 
+	commitChan chan paxosrpc.Command
+
 	stats map[string]mainrpc.Stats
+	toRun map[string]chan struct{}
 }
 
-func (sm *statsMaster) startStatsMaster() {
+func (sm *statsMaster) startStatsMaster(cmdChan chan paxosrpc.Command,
+	aiChan chan *newAIReq) {
 	for {
 		select {
 		case req := <-sm.reqChan:
@@ -49,32 +56,66 @@ func (sm *statsMaster) startStatsMaster() {
 				continue
 			}
 
-			//TODO PAXOS
+			sm.toRun[init.name] = init.done
 
-			sm.stats[init.name] = initStats(init.name, init.hostport)
+			//PAXOS
+			cmd := paxosrpc.Command{
+				Type:          paxosrpc.Init,
+				CommandNumber: -1,
+				Player:        init.name,
+				Hostport:      init.hostport,
+			}
+			cmdChan <- cmd
 
 		case res := <-sm.addChan:
-			if _, ok := sm.stats[res.Player1]; !ok {
-				continue
+			//PAXOS
+			cmd := paxosrpc.Command{
+				Type:          paxosrpc.Update,
+				CommandNumber: -1,
+				GameResult:    res,
 			}
-			if _, ok := sm.stats[res.Player2]; !ok {
-				continue
-			}
+			cmdChan <- cmd
 
-			//TODO PAXOS
+		case cmd := <-sm.commitChan:
+			switch cmd.Type {
+			case paxosrpc.Init:
+				sm.stats[cmd.Player] = initStats(cmd.Player, cmd.Hostport)
 
-			switch {
-			case res.Points1 < res.Points2:
-				sm.stats[res.Player1] = updateLoss(sm.stats[res.Player1], res)
-				sm.stats[res.Player2] = updateWin(sm.stats[res.Player2], res)
+				if c, ok := sm.toRun[cmd.Player]; ok {
+					close(c)
+					delete(sm.toRun, cmd.Player)
+				}
+				req := new(newAIReq)
+				req.name = cmd.Player
+				req.manage = false
+				req.hostport = cmd.Hostport
 
-			case res.Points2 < res.Points1:
-				sm.stats[res.Player1] = updateWin(sm.stats[res.Player1], res)
-				sm.stats[res.Player2] = updateLoss(sm.stats[res.Player2], res)
+				aiChan <- req
 
-			case res.Points1 == res.Points2:
-				sm.stats[res.Player1] = updateDraw(sm.stats[res.Player1], res)
-				sm.stats[res.Player2] = updateDraw(sm.stats[res.Player2], res)
+			case paxosrpc.Update:
+				res := cmd.GameResult
+
+				if _, ok := sm.stats[res.Player1]; !ok {
+					continue
+				}
+				if _, ok := sm.stats[res.Player2]; !ok {
+					continue
+				}
+
+				switch {
+				case res.Points1 < res.Points2:
+					sm.stats[res.Player1] = updateLoss(sm.stats[res.Player1], res)
+					sm.stats[res.Player2] = updateWin(sm.stats[res.Player2], res)
+
+				case res.Points2 < res.Points1:
+					sm.stats[res.Player1] = updateWin(sm.stats[res.Player1], res)
+					sm.stats[res.Player2] = updateLoss(sm.stats[res.Player2], res)
+
+				case res.Points1 == res.Points2:
+					sm.stats[res.Player1] = updateDraw(sm.stats[res.Player1], res)
+					sm.stats[res.Player2] = updateDraw(sm.stats[res.Player2], res)
+				}
+			default:
 			}
 		}
 

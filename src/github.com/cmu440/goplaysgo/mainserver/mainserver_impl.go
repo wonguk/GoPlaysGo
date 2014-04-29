@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cmu440/goplaysgo/rpc/mainrpc"
+	"github.com/cmu440/goplaysgo/rpc/paxosrpc"
 )
 
 // Error Log
@@ -40,6 +41,7 @@ type mainServer struct {
 	masterAddr string
 	numNodes   int
 	port       int
+	hostport   string
 	servers    []node
 
 	ready   chan struct{}
@@ -47,7 +49,7 @@ type mainServer struct {
 
 	aiMaster    *aiMaster
 	statsMaster *statsMaster
-	//TODO Paxos variables
+	paxosMaster *paxosMaster
 }
 
 // NewMainServer returns a mainserver that manages the different AIs and
@@ -64,7 +66,7 @@ func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer,
 	}
 
 	//TODO Possibly change later to test distributed impl
-	hostport := "localhost:" + strconv.Itoa(port)
+	ms.hostport = "localhost:" + strconv.Itoa(port)
 
 	ms.masterLock = sync.Mutex{}
 	ms.readyLock = sync.Mutex{}
@@ -72,30 +74,12 @@ func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer,
 	ms.numNodes = numNodes
 	ms.port = port
 
-	ms.servers = []node{}
+	ms.servers = []node{node{hostport: ms.hostport}}
 
 	ms.ready = make(chan struct{})
 
-	statsMaster := new(statsMaster)
-	statsMaster.reqChan = make(chan statsRequest)
-	statsMaster.allReqChan = make(chan allStatsRequest)
-	statsMaster.initChan = make(chan initRequest)
-	statsMaster.addChan = make(chan mainrpc.GameResult)
-	statsMaster.stats = make(map[string]mainrpc.Stats)
-
-	go statsMaster.startStatsMaster()
-
-	ms.statsMaster = statsMaster
-
-	aiMaster := new(aiMaster)
-	aiMaster.aiChan = make(chan *newAIReq)
-	aiMaster.aiClients = make(map[string]*aiInfo)
-
-	go aiMaster.startAIMaster(ms.statsMaster.initChan, ms.statsMaster.addChan)
-
-	ms.aiMaster = aiMaster
-
 	rpc.RegisterName("MainServer", ms)
+	rpc.RegisterName("PaxosServer", ms)
 	rpc.HandleHTTP()
 	l, e := net.Listen("tcp", ":"+strconv.Itoa(port))
 	if e != nil {
@@ -107,14 +91,19 @@ func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer,
 	if ms.master {
 		if ms.numNodes == 1 {
 			LOGV.Println("Master:", "Done Initializing")
+			ms.startMasters()
+
 			ms.isReady.Lock()
 			ms.isReady.ready = true
 			ms.isReady.Unlock()
+
 			return ms, nil
 		}
 
 		LOGV.Println("Master:", port, "waiting for nodes to register")
 		<-ms.ready
+
+		ms.startMasters()
 
 		ms.isReady.Lock()
 		ms.isReady.ready = true
@@ -126,7 +115,7 @@ func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer,
 	LOGV.Println("Slave:", port, "Dialing master")
 	client := dialHTTP(masterServerHostPort)
 
-	args := mainrpc.RegisterArgs{hostport}
+	args := mainrpc.RegisterArgs{ms.hostport}
 	var reply mainrpc.RegisterReply
 
 	for {
@@ -142,6 +131,7 @@ func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer,
 			}
 
 			ms.initClients()
+			ms.startMasters()
 
 			ms.isReady.Lock()
 			ms.isReady.ready = true
@@ -159,6 +149,56 @@ func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer,
 	}
 
 	return nil, errors.New("should have been successful")
+}
+
+// startMasters starts all the backend threads for the main servers
+func (ms *mainServer) startMasters() {
+	// Initialize PaxosMaster
+	paxosMaster := new(paxosMaster)
+	paxosMaster.n = 0
+	paxosMaster.maxCmdNum = 0
+	paxosMaster.commands = make(map[int]paxosrpc.Command)
+	paxosMaster.cmdDone = make(map[int]chan struct{})
+	paxosMaster.commandChan = make(chan paxosrpc.Command)
+	paxosMaster.prepareChan = make(chan prepRequest)
+	paxosMaster.acceptChan = make(chan acceptRequest)
+	paxosMaster.commitChan = make(chan paxosrpc.Command)
+	paxosMaster.servers = make([]node, len(ms.servers)-1)
+
+	// Don't include self in the list of servers
+	i := 0
+	for _, n := range ms.servers {
+		if n.hostport != ms.hostport {
+			paxosMaster.servers[i] = n
+			i++
+		}
+	}
+
+	// Initialize StatsMaster
+	statsMaster := new(statsMaster)
+	statsMaster.reqChan = make(chan statsRequest)
+	statsMaster.allReqChan = make(chan allStatsRequest)
+	statsMaster.initChan = make(chan initRequest)
+	statsMaster.addChan = make(chan mainrpc.GameResult)
+	statsMaster.commitChan = make(chan paxosrpc.Command)
+	statsMaster.stats = make(map[string]mainrpc.Stats)
+	statsMaster.toRun = make(map[string]chan struct{})
+
+	// Initialize AIMaster
+	aiMaster := new(aiMaster)
+	aiMaster.aiChan = make(chan *newAIReq)
+	aiMaster.getChan = make(chan *getAIsReq)
+	aiMaster.aiClients = make(map[string]*aiInfo)
+
+	// Start Masters
+	go paxosMaster.startPaxosMaster(statsMaster.commitChan)
+	go statsMaster.startStatsMaster(paxosMaster.commandChan, aiMaster.aiChan)
+	go aiMaster.startAIMaster(statsMaster.initChan, statsMaster.addChan)
+
+	ms.paxosMaster = paxosMaster
+	ms.statsMaster = statsMaster
+	ms.aiMaster = aiMaster
+
 }
 
 // RegisterServer will add the servers into the Paxos ring
@@ -204,6 +244,7 @@ func (ms *mainServer) RegisterServer(args *mainrpc.RegisterArgs, reply *mainrpc.
 	return nil
 }
 
+// getServers returns an array of hostports of the servers
 func (ms *mainServer) getServers() []string {
 	servers := make([]string, len(ms.servers))
 
@@ -240,6 +281,16 @@ func (ms *mainServer) GetServers(args *mainrpc.GetServersArgs, reply *mainrpc.Ge
 // SubmitAI takes in an AI go program and schedules them to
 func (ms *mainServer) SubmitAI(args *mainrpc.SubmitAIArgs, reply *mainrpc.SubmitAIReply) error {
 	LOGV.Println("SubmitAI")
+
+	ms.isReady.Lock()
+	if !ms.isReady.ready {
+		ms.isReady.Unlock()
+
+		reply.Status = mainrpc.NotReady
+		return nil
+	}
+	ms.isReady.Unlock()
+
 	retChan := make(chan bool)
 	req := &newAIReq{
 		name:     args.Name,
@@ -264,6 +315,16 @@ func (ms *mainServer) SubmitAI(args *mainrpc.SubmitAIArgs, reply *mainrpc.Submit
 // in the server.
 func (ms *mainServer) GetStandings(args *mainrpc.GetStandingsArgs, reply *mainrpc.GetStandingsReply) error {
 	LOGV.Println("GetStandings:")
+
+	ms.isReady.Lock()
+	if !ms.isReady.ready {
+		ms.isReady.Unlock()
+
+		reply.Status = mainrpc.NotReady
+		return nil
+	}
+	ms.isReady.Unlock()
+
 	retChan := make(chan mainrpc.Standings)
 
 	req := allStatsRequest{retChan}
@@ -275,12 +336,77 @@ func (ms *mainServer) GetStandings(args *mainrpc.GetStandingsArgs, reply *mainrp
 	return nil
 }
 
-// TODO: Decide whether or not the RefereeServer should make a rpc
-// call to the MainServer to return results of a game.
+// Prepare is the rpc called when a MainServer wants to propose(?) a command
+func (ms *mainServer) Prepare(args *paxosrpc.PrepareArgs, reply *paxosrpc.PrepareReply) error {
+	ms.isReady.Lock()
+	if !ms.isReady.ready {
+		ms.isReady.Unlock()
+
+		reply.Status = paxosrpc.NotReady
+		return nil
+	}
+	ms.isReady.Unlock()
+
+	req := prepRequest{
+		n:       args.N,
+		cmdNum:  args.CommandNumber,
+		reply:   reply,
+		retChan: make(chan struct{}),
+	}
+
+	ms.paxosMaster.prepareChan <- req
+	<-req.retChan
+
+	return nil
+}
+
+// Accept is the rpc called once a majority agreed to the Prepare Call
+func (ms *mainServer) Accept(args *paxosrpc.AcceptArgs, reply *paxosrpc.AcceptReply) error {
+	ms.isReady.Lock()
+	if !ms.isReady.ready {
+		ms.isReady.Unlock()
+
+		reply.Status = paxosrpc.NotReady
+		return nil
+	}
+	ms.isReady.Unlock()
+
+	req := acceptRequest{
+		n:       args.N,
+		command: args.Command,
+		reply:   reply,
+		retChan: make(chan struct{}),
+	}
+
+	ms.paxosMaster.acceptChan <- req
+	<-req.retChan
+
+	return nil
+}
+
+// Commit is the rpc called once the command has been accepted by the majority
+func (ms *mainServer) Commit(args *paxosrpc.CommitArgs, reply *paxosrpc.CommitReply) error {
+	ms.isReady.Lock()
+	if !ms.isReady.ready {
+		ms.isReady.Unlock()
+
+		reply.Status = paxosrpc.NotReady
+		return nil
+	}
+	ms.isReady.Unlock()
+
+	ms.paxosMaster.commitChan <- args.Command
+
+	reply.Status = paxosrpc.OK
+
+	return nil
+}
 
 func (ms *mainServer) initClients() {
 	for _, n := range ms.servers {
-		n.client = dialHTTP(n.hostport)
+		if n.hostport != ms.hostport {
+			n.client = dialHTTP(n.hostport)
+		}
 	}
 }
 
