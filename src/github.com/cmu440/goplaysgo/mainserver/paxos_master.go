@@ -73,7 +73,7 @@ func (pm *paxosMaster) startPaxosMaster(statsChan chan paxosrpc.Command) {
 
 		case p := <-pm.prepareChan:
 			LOGV.Println("PaxosMaster:", "Recieved Prepare", p.n)
-			if p.n < pm.n {
+			if p.n <= pm.n {
 				LOGV.Println("PaxosMaster:", "Rejecting Due to Low n", p.n, pm.n)
 				p.reply.Status = paxosrpc.Reject
 				p.reply.N = pm.n
@@ -285,7 +285,7 @@ func (ph *paxosHandler) commit(cmtChan chan paxosrpc.Command, servers []node) {
 	cArgs := paxosrpc.CommitArgs{ph.n, ph.command}
 	for _, s := range servers {
 		var cReply paxosrpc.CommitReply
-		s.client.Go("PaxosServer", &cArgs, &cReply, nil)
+		s.client.Go("PaxosServer.Commit", &cArgs, &cReply, nil)
 	}
 }
 
