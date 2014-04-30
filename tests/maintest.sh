@@ -30,6 +30,7 @@ function startMainServers {
     # Start master storage server.
     ${MAIN_SERVER} -N=${N} -port=${MASTER_PORT} 2> /dev/null &
     MAIN_SERVER_PID[0]=$!
+    sleep 1
     # Start slave storage servers.
     if [ "$N" -gt 1 ]
     then
@@ -38,9 +39,10 @@ function startMainServers {
 	          MAIN_SLAVE_PORT=$(((RANDOM % 10000) + 10000))
             ${MAIN_SERVER} -port=${MAIN_SLAVE_PORT} -master="localhost:${MASTER_PORT}" 2> /dev/null &
             MAIN_SERVER_PID[$i]=$!
+            sleep 1
         done
     fi
-    sleep 10
+    sleep 2
 }
 
 function stopMainServers {
