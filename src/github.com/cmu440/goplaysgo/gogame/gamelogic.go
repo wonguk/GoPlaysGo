@@ -143,6 +143,8 @@ func (bd *Board) FindStoneChain(move Move, player Player, chain []int, count int
 	return chain, count
 }
 
+
+//CountTerritory() -goes through the chain of pieces and counts the ammount of terrority that they it has
 func (bd *Board) CountTerritory(pieces []int, count int) int {
 	TCount := 0
 	for index := 0; index < count; index = index + 2 {
@@ -193,6 +195,7 @@ func (bd *Board) CountTerritory(pieces []int, count int) int {
 	return TCount
 }
 
+//MakeMove() -implents the players move, if the move is not valid then it is counted as a pass
 func (bd *Board) MakeMove(player Player, move Move) {
 	PlacedStone := new(Stones)
 	PlacedStone.Player = player
@@ -203,7 +206,9 @@ func (bd *Board) MakeMove(player Player, move Move) {
 			for xindex := 0; xindex < len(bd.Grid); xindex++ {
 				if bd.Grid[yindex][xindex].Player != "" {
 					EmptyChain := make([]int, len(bd.Grid)*len(bd.Grid))
-					StoneChain, ChainLen := bd.FindStoneChain(Move{yindex, xindex}, bd.Grid[yindex][xindex].Player, EmptyChain, 0)
+					EmptyChain[0] = yindex
+					EmptyChain[1] = xindex
+					StoneChain, ChainLen := bd.FindStoneChain(Move{yindex, xindex}, bd.Grid[yindex][xindex].Player, EmptyChain, 2)
 					TerrorityCount := bd.CountTerritory(StoneChain, ChainLen)
 					if TerrorityCount == 0 {
 						for index := 0; index < ChainLen*2; index = index + 2 {
@@ -225,10 +230,12 @@ func (bd *Board) MakeMove(player Player, move Move) {
 	return
 }
 
+//IsDone() -checks the board struct to see if two turns have succifully passed
 func (bd *Board) IsDone() bool {
 	return bd.Passed == 2 //Two turns passed with both players passing
 }
 
+//printBoard() -for debugging purposes to print the board line by line
 func (bd *Board) printBoard() {
 	for index := 0; index < len(bd.Grid); index = index + 1 {
 		fmt.Println(bd.Grid[index])
@@ -236,6 +243,7 @@ func (bd *Board) printBoard() {
 	fmt.Println(" ")
 }
 
+//PlayerPoints() -goes through each of the stones on the board and counts up the terrority it owns (no overlapping) and returns the count
 func (bd *Board) PlayerPoints(player Player) int {
 	BoardCopy := MakeBoard(len(bd.Grid))
 	BoardCopy.Turn = bd.Turn
