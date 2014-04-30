@@ -22,20 +22,49 @@ type acceptRequest struct {
 	retChan chan struct{}
 }
 
+type maxRequest struct {
+	retChan chan maxReply
+}
+
+type maxReply struct {
+	done   chan bool
+	cmdNum int
+}
+
+type doneRequest struct {
+	cmdNum  int
+	retChan chan chan bool
+}
+
+type cmdRequest struct {
+	retChan chan []paxosrpc.Command
+}
+
 type paxosMaster struct {
-	n         int
+	myn       int
+	n         map[int]int
 	maxCmdNum int
 
-	commands map[int]paxosrpc.Command
-	cmdDone  map[int]chan bool // closed chan => Command has been run
+	uncommited  map[int]paxosrpc.Command
+	uncommitedN map[int]int
+	commands    map[int]paxosrpc.Command
+	cmdDone     map[int]chan bool // closed chan => Command has been run
 
-	nChan       chan int
+	nChan       chan cn
 	commandChan chan paxosrpc.Command // Requests to initialize an AI
 	prepareChan chan prepRequest      // Request to check n
 	acceptChan  chan acceptRequest    // Request to Accept value
 	commitChan  chan paxosrpc.Command // Request to commit
+	getCmdChan  chan cmdRequest
+	doneChan    chan doneRequest
+	maxChan     chan maxRequest
 
 	servers []node
+}
+
+type cn struct {
+	cmdNum int
+	n      int
 }
 
 type paxosHandler struct {
@@ -51,19 +80,22 @@ type commitHandler struct {
 func (pm *paxosMaster) startPaxosMaster(statsChan chan paxosrpc.Command) {
 	// Mark Initial command as done (so first command can run)
 	LOGV.Println("PaxosMaster:", "Starting Paxos Master!")
+	pm.commands[0] = paxosrpc.Command{
+		CommandNumber: 0,
+		Type:          paxosrpc.NOP,
+	}
 	pm.cmdDone[0] = make(chan bool, 1)
 	close(pm.cmdDone[0])
 
 	for {
 		select {
-		case n := <-pm.nChan:
-			if n > pm.n {
-				pm.n = n + 1
+		case cn := <-pm.nChan:
+			if cn.n > pm.n[cn.cmdNum] {
+				pm.n[cn.cmdNum] = cn.n
 			}
 
 		case c := <-pm.commandChan:
 			LOGV.Println("PaxosMaster:", "Recieved Command", c.CommandNumber, c.Type)
-			pm.n++
 
 			if c.CommandNumber == -1 {
 				pm.maxCmdNum++
@@ -72,40 +104,73 @@ func (pm *paxosMaster) startPaxosMaster(statsChan chan paxosrpc.Command) {
 			}
 
 			ph := new(paxosHandler)
-			ph.n = pm.n
+			n, ok := pm.n[c.CommandNumber]
+			if !ok {
+				pm.n[c.CommandNumber] = 0
+				n = 0
+			}
+			pm.n[c.CommandNumber] = n + 1
+			ph.n = n + 1
 			ph.command = c
 
 			go ph.startHandler(pm.nChan, pm.commandChan, pm.commitChan, pm.servers)
 
 		case p := <-pm.prepareChan:
 			LOGV.Println("PaxosMaster:", "Recieved Prepare", p.n)
-			if p.n <= pm.n {
-				LOGV.Println("PaxosMaster:", "Rejecting Due to Low n", p.n, pm.n)
-				p.reply.Status = paxosrpc.Reject
-				p.reply.N = pm.n
-			} else if last, ok := pm.commands[p.cmdNum]; ok {
-				LOGV.Println("PaxosMaster:", "Rejecting Due to Past Commit", p.cmdNum)
+
+			n, ok := pm.n[p.cmdNum]
+
+			if !ok {
+				pm.n[p.cmdNum] = 0
+				n = 0
+			}
+
+			if last, ok := pm.commands[p.cmdNum]; ok {
+				LOGV.Println("PaxosMaster:", "Rejecting Due to Past Commit", p.cmdNum, last)
 				p.reply.Status = paxosrpc.Reject
 				p.reply.Command = last
 				p.reply.MaxCmdNum = pm.maxCmdNum
-				pm.n = p.n
+				if p.n > n {
+					pm.n[p.cmdNum] = p.n
+				}
+			} else if p.n < n {
+				LOGV.Println("PaxosMaster:", "Rejecting Due to Low n", p.n, n)
+				p.reply.Status = paxosrpc.Reject
+				p.reply.N = n
+			} else if uncommited, ok := pm.uncommited[p.cmdNum]; ok {
+				LOGV.Println("PaxosMaster:", "Accepting, but has uncommited val")
+
+				p.reply.Status = paxosrpc.OK
+				p.reply.Command = uncommited
+				p.reply.N = pm.uncommitedN[p.cmdNum]
+				p.reply.MaxCmdNum = pm.maxCmdNum
+				pm.n[p.cmdNum] = p.n
 			} else {
 				LOGV.Println("PaxosMaster:", "Accepting Prepare", p.n)
 				p.reply.Status = paxosrpc.OK
-				pm.n = p.n
+				pm.n[p.cmdNum] = p.n
 			}
 
 			close(p.retChan)
 
 		case a := <-pm.acceptChan:
 			LOGV.Println("PaxosMAster:", "Recieved Accept", a.n)
-			if a.n != pm.n {
-				LOGV.Println("PaxosMaster:", "Rejecting due to Wrong n", a.n, pm.n)
+			n, ok := pm.n[a.command.CommandNumber]
+
+			if !ok {
+				pm.n[a.command.CommandNumber] = 0
+				n = 0
+			}
+
+			if a.n < n {
+				LOGV.Println("PaxosMaster:", "Rejecting due to Wrong n", a.n, n)
 				a.reply.Status = paxosrpc.Reject
 			} else {
 				LOGV.Println("PaxosMaster:", "Accepting Accept", a.n, a.command)
 				a.reply.Status = paxosrpc.OK
-				pm.commitChan <- a.command
+				pm.uncommited[a.command.CommandNumber] = a.command
+				pm.uncommitedN[a.command.CommandNumber] = a.n
+				pm.n[a.command.CommandNumber] = a.n
 			}
 
 			close(a.retChan)
@@ -146,6 +211,35 @@ func (pm *paxosMaster) startPaxosMaster(statsChan chan paxosrpc.Command) {
 
 				go ch.startHandler(prevDone, statsChan)
 			}
+
+		case req := <-pm.doneChan:
+			done, ok := pm.cmdDone[req.cmdNum]
+
+			if !ok {
+				done := make(chan bool)
+				pm.cmdDone[req.cmdNum] = done
+			}
+
+			req.retChan <- done
+
+		case req := <-pm.maxChan:
+			done, ok := pm.cmdDone[pm.maxCmdNum]
+
+			if !ok {
+				done := make(chan bool)
+				pm.cmdDone[pm.maxCmdNum] = done
+			}
+
+			reply := maxReply{done, pm.maxCmdNum}
+			req.retChan <- reply
+
+		case req := <-pm.getCmdChan:
+			cmds := make([]paxosrpc.Command, len(pm.commands))
+
+			for i, c := range pm.commands {
+				cmds[i] = c
+			}
+			req.retChan <- cmds
 		}
 	}
 }
@@ -164,7 +258,7 @@ func (ch *commitHandler) startHandler(done chan bool, commitChan chan paxosrpc.C
 }
 
 // paxosHandler basically runs the Paxos protocol(?) on the given command
-func (ph *paxosHandler) startHandler(nChan chan int, cmdChan chan paxosrpc.Command,
+func (ph *paxosHandler) startHandler(nChan chan cn, cmdChan chan paxosrpc.Command,
 	cmtChan chan paxosrpc.Command, servers []node) {
 	//Prepare Phase
 	LOGV.Println("PaxosHandler:", "Sending Prepare Messages")
@@ -186,7 +280,7 @@ func (ph *paxosHandler) startHandler(nChan chan int, cmdChan chan paxosrpc.Comma
 }
 
 // The Prepare phase in paxos
-func (ph *paxosHandler) prepare(nChan chan int, cmdChan chan paxosrpc.Command,
+func (ph *paxosHandler) prepare(nChan chan cn, cmdChan chan paxosrpc.Command,
 	cmtChan chan paxosrpc.Command, servers []node) bool {
 	numPrepare := 0
 	prepareChan := make(chan *rpc.Call, len(servers))
@@ -201,7 +295,6 @@ func (ph *paxosHandler) prepare(nChan chan int, cmdChan chan paxosrpc.Command,
 	}
 
 	maxCmd := 0
-
 	for i := 0; i < len(servers); i++ {
 		call := <-prepareChan
 
@@ -213,17 +306,29 @@ func (ph *paxosHandler) prepare(nChan chan int, cmdChan chan paxosrpc.Command,
 
 		switch reply.Status {
 		case paxosrpc.OK:
-
 			numPrepare++
+
+			if reply.N > ph.n {
+				if ph.command.Type == paxosrpc.NOP {
+					ph.command = reply.Command
+				}
+				ph.n = reply.N
+			}
+
 			if numPrepare == len(servers)/2 {
 				break
 			}
 
 		case paxosrpc.Reject:
-			nChan <- reply.N
+			nChan <- cn{reply.N, reply.Command.CommandNumber}
 
+			// If there was an already commited value at CommandNumber, Give up
 			if reply.Command.CommandNumber == ph.command.CommandNumber {
 				cmtChan <- reply.Command
+				if ph.command.Type != paxosrpc.NOP {
+					ph.command.CommandNumber = -1
+					cmdChan <- ph.command
+				}
 				return false
 			}
 			if reply.MaxCmdNum > maxCmd {
@@ -238,7 +343,7 @@ func (ph *paxosHandler) prepare(nChan chan int, cmdChan chan paxosrpc.Command,
 	// If not enough OKs, resend command to master
 	if numPrepare < len(servers)/2 {
 		if ph.command.Type != paxosrpc.NOP {
-			ph.command.CommandNumber = maxCmd + 1
+			ph.command.CommandNumber = -1
 		}
 		cmdChan <- ph.command
 		return false

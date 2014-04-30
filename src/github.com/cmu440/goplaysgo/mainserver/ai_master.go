@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cmu440/goplaysgo/gogame"
+	//"github.com/cmu440/goplaysgo/gogame"
 	"github.com/cmu440/goplaysgo/rpc/airpc"
 	"github.com/cmu440/goplaysgo/rpc/mainrpc"
 )
@@ -33,7 +33,7 @@ type newAIReq struct {
 }
 
 type getAIsReq struct {
-	retChan chan []*aiInfo
+	retChan chan []airpc.AIPlayer
 }
 
 type aiMaster struct {
@@ -42,7 +42,7 @@ type aiMaster struct {
 	aiClients map[string]*aiInfo
 }
 
-func (am *aiMaster) startAIMaster(initChan chan initRequest, addChan chan mainrpc.GameResult) {
+func (am *aiMaster) startAIMaster(initChan chan initRequest, servers []string) { //, addChan chan mainrpc.GameResult) {
 	for {
 		select {
 		case newAI := <-am.aiChan:
@@ -73,18 +73,19 @@ func (am *aiMaster) startAIMaster(initChan chan initRequest, addChan chan mainrp
 					newInfo.hostport = hostport
 					newInfo.client = dialHTTP(hostport)
 
-					done := make(chan struct{})
+					done := make(chan bool)
 					initChan <- initRequest{newAI.name, hostport, done}
 
-					go newInfo.testAI(done, newAI.retChan, addChan, am.getChan)
+					go newInfo.testAI(done, newAI.retChan, am.getChan, servers) //addChan, am.getChan)
 				}
 			}
 		case req := <-am.getChan:
-			ais := make([]*aiInfo, len(am.aiClients))
+			ais := make([]airpc.AIPlayer, len(am.aiClients))
 
 			i := 0
 			for _, ai := range am.aiClients {
-				ais[i] = ai
+				ais[i].Player = ai.name
+				ais[i].Hostport = ai.hostport
 				i++
 			}
 
@@ -122,7 +123,7 @@ func (ai *aiInfo) initAI() (string, error) {
 
 		runnerPath := gopath + filepath.FromSlash("/bin/airunner")
 		run := exec.Command(runnerPath, "-name", ai.name,
-			"-port", strconv.Itoa(port))
+			"-port", strconv.Itoa(port), ">&", ai.name+"log")
 		err = run.Start()
 
 		if err == nil {
@@ -136,81 +137,95 @@ func (ai *aiInfo) initAI() (string, error) {
 	}
 }
 
-func (ai *aiInfo) testAI(done chan struct{}, retChan chan mainrpc.Status,
-	resultChan chan mainrpc.GameResult, getAIChan chan *getAIsReq) {
+func (ai *aiInfo) testAI(done chan bool, retChan chan mainrpc.Status,
+	getAIChan chan *getAIsReq, servers []string) {
+	//resultChan chan mainrpc.GameResult, getAIChan chan *getAIsReq) {
 
 	// Wait until StatsMaster has confirmed that AI initialized
-	<-done
-	retChan <- mainrpc.OK
+	if !<-done {
+		retChan <- mainrpc.AIExists
+		return
+	}
 
 	// Get Latest AIs from AIMaster
-	aiReq := &getAIsReq{make(chan []*aiInfo)}
+	aiReq := &getAIsReq{make(chan []airpc.AIPlayer)}
 	getAIChan <- aiReq
 	aiClients := <-aiReq.retChan
 
-	// Initialize RPC Arguments and Replies
-	LOGV.Println("AIMaster:", "Starting tests for", ai.name)
-	checkArgs := airpc.CheckArgs{}
-	oppCheckArgs := airpc.CheckArgs{ai.name}
+	startArgs := airpc.StartGamesArgs{aiClients, servers}
+	var startReply airpc.StartGamesReply
 
-	var checkReply airpc.CheckReply
-	var oppCheckReply airpc.CheckReply
+	err := ai.client.Call("AIServer.StartGames", &startArgs, &startReply)
 
-	initArgs := airpc.InitGameArgs{}
-	initArgs.Size = gogame.Small
-	oppInitArgs := airpc.InitGameArgs{
-		Player:   ai.name,
-		Hostport: ai.hostport,
-		Size:     gogame.Small,
+	if err != nil || startReply.Status != airpc.OK {
+		retChan <- mainrpc.CompileError
+	} else {
+		retChan <- mainrpc.OK
 	}
-	var initReply airpc.InitGameReply
-	var oppInitReply airpc.InitGameReply
+	/*
+		// Initialize RPC Arguments and Replies
+		LOGV.Println("AIMaster:", "Starting tests for", ai.name)
+		checkArgs := airpc.CheckArgs{}
+		oppCheckArgs := airpc.CheckArgs{ai.name}
 
-	startArgs := airpc.StartGameArgs{}
+		var checkReply airpc.CheckReply
+		var oppCheckReply airpc.CheckReply
 
-	// For each AI, run
-	for _, opp := range aiClients {
-		if opp.name == ai.name {
-			continue
+		initArgs := airpc.InitGameArgs{}
+		initArgs.Size = gogame.Small
+		oppInitArgs := airpc.InitGameArgs{
+			Player:   ai.name,
+			Hostport: ai.hostport,
+			Size:     gogame.Small,
 		}
+		var initReply airpc.InitGameReply
+		var oppInitReply airpc.InitGameReply
 
-		LOGV.Println("AIMaster:", "Initializing Test bewteen", ai.name, "and", opp.name)
-		checkArgs.Player = opp.name
+		startArgs := airpc.StartGameArgs{}
 
-		//2PC between the two AIs to test
-		LOGV.Println("AIMaster:", "Checking AI Server Statuses for", ai.name, "and", opp.name)
-		err1 := ai.client.Call("AIServer.CheckGame", &checkArgs, &checkReply)
-		err2 := opp.client.Call("AIServer.CheckGame", &oppCheckArgs, &oppCheckReply)
+		// For each AI, run
+		for _, opp := range aiClients {
+			if opp.name == ai.name {
+				continue
+			}
 
-		if err1 != nil || err2 != nil {
-			LOGE.Println("testAI:", "failed to match up", ai.name,
-				opp.name, err1, err2)
-			continue
-		}
+			LOGV.Println("AIMaster:", "Initializing Test bewteen", ai.name, "and", opp.name)
+			checkArgs.Player = opp.name
 
-		if checkReply.Status != airpc.OK || oppCheckReply.Status != airpc.OK {
-			LOGE.Println("testAI:", "failed to match up", ai.name,
-				opp.name, checkReply.Status, oppCheckReply.Status)
-			continue
-		}
+			//2PC between the two AIs to test
+			LOGV.Println("AIMaster:", "Checking AI Server Statuses for", ai.name, "and", opp.name)
+			err1 := ai.client.Call("AIServer.CheckGame", &checkArgs, &checkReply)
+			err2 := opp.client.Call("AIServer.CheckGame", &oppCheckArgs, &oppCheckReply)
 
-		LOGV.Println("AIMaster:", "Starting Test between", ai.name, "and", opp.name)
+			if err1 != nil || err2 != nil {
+				LOGE.Println("testAI:", "failed to match up", ai.name,
+					opp.name, err1, err2)
+				continue
+			}
 
-		//if OK, make them play game (Async)
-		LOGV.Println("AIMaster:", "Initializing AI Game at", ai.name, "and", opp.name)
-		initArgs.Player = opp.name
-		initArgs.Hostport = opp.hostport
-		err1 = ai.client.Call("AIServer.InitGame", &initArgs, &initReply)
-		err2 = opp.client.Call("AIServer.InitGame", &oppInitArgs, &oppInitReply)
+			if checkReply.Status != airpc.OK || oppCheckReply.Status != airpc.OK {
+				LOGE.Println("testAI:", "failed to match up", ai.name,
+					opp.name, checkReply.Status, oppCheckReply.Status)
+				continue
+			}
 
-		LOGV.Println("AIMaster:", "Starting the Game at", ai.name)
-		startArgs.Player = opp.name
-		var gameResult airpc.StartGameReply
-		call := ai.client.Go("AIServer.StartGame", &startArgs, &gameResult, nil)
+			LOGV.Println("AIMaster:", "Starting Test between", ai.name, "and", opp.name)
 
-		//Launch goroutine to notiff statsmaster when game is done
-		go handleGameResult(call, resultChan)
-	}
+			//if OK, make them play game (Async)
+			LOGV.Println("AIMaster:", "Initializing AI Game at", ai.name, "and", opp.name)
+			initArgs.Player = opp.name
+			initArgs.Hostport = opp.hostport
+			err1 = ai.client.Call("AIServer.InitGame", &initArgs, &initReply)
+			err2 = opp.client.Call("AIServer.InitGame", &oppInitArgs, &oppInitReply)
+
+			LOGV.Println("AIMaster:", "Starting the Game at", ai.name)
+			startArgs.Player = opp.name
+			var gameResult airpc.StartGameReply
+			call := ai.client.Go("AIServer.StartGame", &startArgs, &gameResult, nil)
+
+			//Launch goroutine to notiff statsmaster when game is done
+			go handleGameResult(call, resultChan)
+		} */
 }
 
 func handleGameResult(call *rpc.Call, resultChan chan mainrpc.GameResult) {

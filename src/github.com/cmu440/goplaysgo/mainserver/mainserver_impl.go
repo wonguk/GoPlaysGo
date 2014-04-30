@@ -1,6 +1,7 @@
 package mainserver
 
 import (
+	"container/list"
 	"errors"
 	"io/ioutil"
 	"log"
@@ -20,8 +21,7 @@ var LOGE = log.New(ioutil.Discard, "ERROR [MainServer] ",
 	log.Lmicroseconds|log.Lshortfile)
 
 // Verbose Log
-var LOGV = log.New(ioutil.Discard, "VERBOSE [MainServer] ",
-	log.Lmicroseconds|log.Lshortfile)
+var LOGV = log.New(ioutil.Discard, "VERBOSE [MainServer] ", log.Lmicroseconds|log.Lshortfile)
 
 type isReady struct {
 	sync.Mutex
@@ -34,17 +34,19 @@ type node struct {
 }
 
 type mainServer struct {
-	master     bool
-	masterLock sync.Mutex
-	readyLock  sync.Mutex
-	masterAddr string
-	numNodes   int
-	port       int
-	hostport   string
-	servers    []node
+	master      bool
+	replacement bool
+	masterLock  sync.Mutex
+	readyLock   sync.Mutex
+	masterAddr  string
+	numNodes    int
+	port        int
+	hostport    string
+	servers     []node
 
 	ready   chan struct{}
 	isReady isReady
+	quiese  isReady
 
 	aiMaster    *aiMaster
 	statsMaster *statsMaster
@@ -53,7 +55,7 @@ type mainServer struct {
 
 // NewMainServer returns a mainserver that manages the different AIs and
 // their stats
-func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer, error) {
+func NewMainServer(masterServerHostPort string, numNodes, port int, isReplacement bool) (MainServer, error) {
 	ms := new(mainServer)
 
 	if masterServerHostPort == "" {
@@ -112,6 +114,18 @@ func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer,
 		return ms, nil
 	}
 
+	if isReplacement {
+		<-ms.ready
+
+		ms.startMasters()
+
+		ms.isReady.Lock()
+		ms.isReady.ready = true
+		ms.isReady.Unlock()
+
+		return ms, nil
+	}
+
 	LOGV.Println("Slave:", port, "Dialing master")
 	client := dialHTTP(masterServerHostPort)
 
@@ -156,15 +170,20 @@ func NewMainServer(masterServerHostPort string, numNodes, port int) (MainServer,
 func (ms *mainServer) startMasters() {
 	// Initialize PaxosMaster
 	paxosMaster := new(paxosMaster)
-	paxosMaster.n = 0
 	paxosMaster.maxCmdNum = 0
+	paxosMaster.n = make(map[int]int)
+	paxosMaster.uncommited = make(map[int]paxosrpc.Command)
+	paxosMaster.uncommitedN = make(map[int]int)
 	paxosMaster.commands = make(map[int]paxosrpc.Command)
 	paxosMaster.cmdDone = make(map[int]chan bool)
-	paxosMaster.nChan = make(chan int, 1000)
+	paxosMaster.nChan = make(chan cn, 1000)
 	paxosMaster.commandChan = make(chan paxosrpc.Command, 1000)
 	paxosMaster.prepareChan = make(chan prepRequest, 1000)
 	paxosMaster.acceptChan = make(chan acceptRequest, 1000)
 	paxosMaster.commitChan = make(chan paxosrpc.Command, 1000)
+	paxosMaster.getCmdChan = make(chan cmdRequest, 1000)
+	paxosMaster.doneChan = make(chan doneRequest, 1000)
+	paxosMaster.maxChan = make(chan maxRequest, 1000)
 	paxosMaster.servers = make([]node, len(ms.servers)-1)
 
 	// Don't include self in the list of servers
@@ -181,10 +200,12 @@ func (ms *mainServer) startMasters() {
 	statsMaster.reqChan = make(chan statsRequest, 1000)
 	statsMaster.allReqChan = make(chan allStatsRequest, 1000)
 	statsMaster.initChan = make(chan initRequest, 1000)
-	statsMaster.addChan = make(chan mainrpc.GameResult, 1000)
+	//statsMaster.addChan = make(chan mainrpc.GameResult, 1000)
+	statsMaster.resultChan = make(chan resultRequest, 1000)
 	statsMaster.commitChan = make(chan paxosrpc.Command, 1000)
 	statsMaster.stats = make(map[string]mainrpc.Stats)
-	statsMaster.toRun = make(map[string]chan struct{})
+	statsMaster.toRun = make(map[string]chan bool)
+	statsMaster.toReturn = list.New()
 
 	// Initialize AIMaster
 	aiMaster := new(aiMaster)
@@ -195,7 +216,7 @@ func (ms *mainServer) startMasters() {
 	// Start Masters
 	go paxosMaster.startPaxosMaster(statsMaster.commitChan)
 	go statsMaster.startStatsMaster(paxosMaster.commandChan, aiMaster.aiChan)
-	go aiMaster.startAIMaster(statsMaster.initChan, statsMaster.addChan)
+	go aiMaster.startAIMaster(statsMaster.initChan, ms.getServers()) //, statsMaster.addChan)
 
 	ms.paxosMaster = paxosMaster
 	ms.statsMaster = statsMaster
@@ -289,6 +310,14 @@ func (ms *mainServer) SubmitAI(args *mainrpc.SubmitAIArgs, reply *mainrpc.Submit
 	}
 	ms.isReady.Unlock()
 
+	ms.quiese.Lock()
+	if !ms.isReady.ready {
+		ms.quiese.Unlock()
+		reply.Status = mainrpc.NotReady
+		return nil
+	}
+	ms.quiese.Unlock()
+
 	retChan := make(chan mainrpc.Status)
 	req := &newAIReq{
 		name:     args.Name,
@@ -301,6 +330,19 @@ func (ms *mainServer) SubmitAI(args *mainrpc.SubmitAIArgs, reply *mainrpc.Submit
 	ms.aiMaster.aiChan <- req
 
 	reply.Status = <-retChan
+
+	return nil
+}
+
+func (ms *mainServer) SubmitResult(args *mainrpc.SubmitResultArgs, reply *mainrpc.SubmitResultReply) error {
+	req := resultRequest{
+		result:  args.GameResult,
+		retChan: make(chan mainrpc.Status),
+	}
+
+	ms.statsMaster.resultChan <- req
+
+	reply.Status = <-req.retChan
 
 	return nil
 }
@@ -401,6 +443,108 @@ func (ms *mainServer) Commit(args *paxosrpc.CommitArgs, reply *paxosrpc.CommitRe
 	LOGV.Println("Commit:", "returning")
 
 	reply.Status = paxosrpc.OK
+
+	return nil
+}
+
+func (ms *mainServer) Quiese(args *paxosrpc.QuieseArgs, reply *paxosrpc.QuieseReply) error {
+	ms.isReady.Lock()
+	if !ms.isReady.ready {
+		ms.isReady.Unlock()
+		reply.Status = paxosrpc.NotReady
+		return nil
+	}
+	ms.isReady.Unlock()
+
+	switch args.Type {
+	case paxosrpc.Setup:
+		ms.quiese.Lock()
+		ms.quiese.ready = false
+		ms.quiese.Unlock()
+
+		req := maxRequest{make(chan maxReply)}
+		ms.paxosMaster.maxChan <- req
+		maxReply := <-req.retChan
+
+		// Wait till done
+		<-maxReply.done
+
+		reply.Status = paxosrpc.OK
+		reply.Servers = ms.getServers()
+		reply.CommandNumber = maxReply.cmdNum
+
+	case paxosrpc.Sync:
+		nopReq := paxosrpc.Command{
+			CommandNumber: args.CommandNumber,
+			Type:          paxosrpc.NOP,
+		}
+
+		ms.paxosMaster.commandChan <- nopReq
+
+		// Get Done Chan and wait till done
+		req := doneRequest{args.CommandNumber, make(chan chan bool)}
+		ms.paxosMaster.doneChan <- req
+		done := <-req.retChan
+
+		// Wait till done
+		<-done
+
+		reply.Status = paxosrpc.OK
+
+	case paxosrpc.Replace:
+		// Get Commands until now
+		req := cmdRequest{make(chan []paxosrpc.Command)}
+		ms.paxosMaster.getCmdChan <- req
+		commands := <-req.retChan
+
+		i := 0
+		for j, n := range ms.servers {
+			// Update Servers
+			if n.hostport == args.ToReplace[i] {
+				n.hostport = args.ToAdd[i]
+				n.client = dialHTTP(n.hostport)
+				ms.servers[j] = n
+
+				// If Master, tell
+				if args.Master {
+					qArgs := paxosrpc.QuieseArgs{
+						Type:     paxosrpc.CatchUp,
+						Commands: commands,
+						Servers:  ms.getServers(),
+					}
+					var qReply paxosrpc.QuieseReply
+					n.client.Go("PaxosServer.Quiese", &qArgs, &qReply, nil)
+				}
+			}
+		}
+
+		reply.Status = paxosrpc.OK
+
+		ms.quiese.Lock()
+		ms.quiese.ready = true
+		ms.quiese.Unlock()
+
+	case paxosrpc.CatchUp:
+		if !ms.replacement {
+			reply.Status = paxosrpc.WrongServer
+			return nil
+		}
+		// Send Commands to commit chan
+		for _, c := range args.Commands {
+			ms.statsMaster.commitChan <- c
+		}
+
+		// Update Server list
+		ms.servers = make([]node, len(reply.Servers))
+
+		for i, h := range args.Servers {
+			ms.servers[i].hostport = h
+		}
+
+		reply.Status = paxosrpc.OK
+		// Close ready
+		close(ms.ready)
+	}
 
 	return nil
 }

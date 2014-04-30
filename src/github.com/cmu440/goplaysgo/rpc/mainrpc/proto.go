@@ -69,6 +69,14 @@ type SubmitAIReply struct {
 	Status Status
 }
 
+type SubmitResultArgs struct {
+	GameResult GameResult
+}
+
+type SubmitResultReply struct {
+	Status Status
+}
+
 // GetStandingsArgs requests the standings
 type GetStandingsArgs struct {
 }

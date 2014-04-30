@@ -77,6 +77,7 @@ func main() {
 		println("Getting Standings")
 		reply, err := client.GetStandings()
 		printStatus(ci.funcname, reply.Status, err)
+		fmt.Println("NumStats:", len(reply.Standings))
 		for _, stats := range reply.Standings {
 			fmt.Println("Standings for", stats.Name)
 			fmt.Println("HostPort:", stats.Hostport)

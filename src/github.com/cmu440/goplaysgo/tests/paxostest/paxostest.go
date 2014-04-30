@@ -222,6 +222,7 @@ func testFailPrepare() {
 	}
 
 	// Retry Prepare Phase
+	pArgs.N--
 	for _, c := range pt.servers {
 		err := c.Call("PaxosServer.Prepare", &pArgs, &pReply)
 
@@ -287,7 +288,7 @@ func testFailAccept() {
 
 	// Accept Phase
 	cmd := paxosrpc.Command{
-		CommandNumber: pt.cmdNum - 1,
+		CommandNumber: pt.cmdNum,
 		Type:          paxosrpc.Init,
 		Player:        "testNormal",
 		Hostport:      *master, //Dummy port
@@ -317,11 +318,14 @@ func testFailAccept() {
 }
 
 func testCatchup() {
+	// No need to test "catching up" with single server
 	if len(pt.servers) == 1 {
 		fmt.Println("PASS")
 		passCount++
 		return
 	}
+
+	numServers := len(pt.servers)
 
 	pt.n++
 	pt.cmdNum++
@@ -333,7 +337,7 @@ func testCatchup() {
 		Hostport:      *master,
 	}
 
-	commitCmd(cmd1, pt.n, pt.cmdNum, pt.servers[0:len(pt.servers)/2])
+	commitCmd(cmd1, pt.n, pt.cmdNum, pt.servers[0:len(pt.servers)/2+1], numServers)
 	pt.n += 30
 	pt.cmdNum++
 
@@ -344,7 +348,7 @@ func testCatchup() {
 		Hostport:      *master,
 	}
 
-	commitCmd(cmd2, pt.n, pt.cmdNum, pt.servers[len(pt.servers)/2:len(pt.servers)-1])
+	commitCmd(cmd2, pt.n, pt.cmdNum, pt.servers[len(pt.servers)/2:len(pt.servers)], numServers)
 	pt.n += 30
 	pt.cmdNum++
 
@@ -353,7 +357,7 @@ func testCatchup() {
 		Type:          paxosrpc.NOP,
 	}
 
-	commitCmd(cmd3, pt.n, pt.cmdNum, pt.servers)
+	commitCmd(cmd3, pt.n, pt.cmdNum, pt.servers, numServers)
 
 	// Wait for servers to sync up
 	time.Sleep(5 * time.Second)
@@ -370,22 +374,19 @@ func testCatchup() {
 }
 
 func checkCommited(cmd paxosrpc.Command, n int, servers []*rpc.Client) {
-	if servers[0] != nil {
-		return
-	}
 	pArgs := paxosrpc.PrepareArgs{n, cmd.CommandNumber}
 	var pReply paxosrpc.PrepareReply
 
-	for _, c := range servers {
+	for i, c := range servers {
 		err := c.Call("PaxosServer.Prepare", &pArgs, &pReply)
 
 		if err != nil {
-			LOGE.Println("Failed To Connect to Servers", err)
-			return
+			LOGE.Println("Failed To Connect to Server", i, err)
+			continue
 		}
 
 		if pReply.Status == paxosrpc.OK {
-			LOGE.Println("FAIL: Prepare should return Reject")
+			LOGE.Println("FAIL: Prepare should return Reject", pReply.Command, cmd, n, i)
 			failCount++
 			return
 		}
@@ -401,21 +402,20 @@ func checkCommited(cmd paxosrpc.Command, n int, servers []*rpc.Client) {
 	passCount++
 }
 
-func commitCmd(cmd paxosrpc.Command, n int, numCmd int, servers []*rpc.Client) {
-	if servers[0] != nil {
-		return
-	}
-
+func commitCmd(cmd paxosrpc.Command, n int, numCmd int, servers []*rpc.Client, numServers int) {
 	// Prepare Phase
 	pArgs := paxosrpc.PrepareArgs{n, numCmd}
 	var pReply paxosrpc.PrepareReply
 
-	for _, c := range servers {
+	numDead := 0
+
+	for i, c := range servers {
 		err := c.Call("PaxosServer.Prepare", &pArgs, &pReply)
 
 		if err != nil {
-			LOGE.Println("Failed To Connect to Servers", err)
-			return
+			LOGE.Println("Failed To Connect to Server", i, err)
+			numDead++
+			continue
 		}
 
 		if pReply.Status != paxosrpc.OK {
@@ -430,13 +430,17 @@ func commitCmd(cmd paxosrpc.Command, n int, numCmd int, servers []*rpc.Client) {
 		N:       n,
 		Command: cmd,
 	}
+
+	numDead = 0
+
 	var aReply paxosrpc.AcceptReply
-	for _, c := range servers {
+	for i, c := range servers {
 		err := c.Call("PaxosServer.Accept", &aArgs, &aReply)
 
 		if err != nil {
-			LOGE.Println("Failed To Connect to Servers", err)
-			return
+			LOGE.Println("Failed To Connect to Server", i, err)
+			numDead++
+			continue
 		}
 
 		if aReply.Status != paxosrpc.OK {
@@ -452,12 +456,12 @@ func commitCmd(cmd paxosrpc.Command, n int, numCmd int, servers []*rpc.Client) {
 		Command: cmd,
 	}
 	var cReply paxosrpc.CommitReply
-	for _, c := range servers {
+	for i, c := range servers {
 		err := c.Call("PaxosServer.Commit", &cArgs, &cReply)
 
 		if err != nil {
-			LOGE.Println("Failed To Connect to Servers", err)
-			return
+			LOGE.Println("Failed To Connect to Server", i, err)
+			continue
 		}
 
 		if cReply.Status != paxosrpc.OK {
@@ -472,12 +476,12 @@ func commitCmd(cmd paxosrpc.Command, n int, numCmd int, servers []*rpc.Client) {
 	// Check Value
 	pt.n++
 	pArgs.N = pt.n
-	for _, c := range servers {
+	for i, c := range servers {
 		err := c.Call("PaxosServer.Prepare", &pArgs, &pReply)
 
 		if err != nil {
-			LOGE.Println("Failed To Connect to Servers", err)
-			return
+			LOGE.Println("Failed To Connect to Servers", i, err)
+			continue
 		}
 
 		if pReply.Status != paxosrpc.Reject {
@@ -495,4 +499,6 @@ func commitCmd(cmd paxosrpc.Command, n int, numCmd int, servers []*rpc.Client) {
 
 	fmt.Println("PASS")
 	passCount++
+
+	return
 }

@@ -1,6 +1,8 @@
 package mainserver
 
 import (
+	"container/list"
+
 	"github.com/cmu440/goplaysgo/rpc/mainrpc"
 	"github.com/cmu440/goplaysgo/rpc/paxosrpc"
 )
@@ -18,7 +20,12 @@ type initRequest struct {
 	name     string
 	hostport string
 
-	done chan struct{}
+	done chan bool
+}
+
+type resultRequest struct {
+	result  mainrpc.GameResult
+	retChan chan mainrpc.Status
 }
 
 type statsMaster struct {
@@ -26,12 +33,14 @@ type statsMaster struct {
 	allReqChan chan allStatsRequest
 
 	initChan chan initRequest
-	addChan  chan mainrpc.GameResult
+	//addChan  chan mainrpc.GameResult
+	resultChan chan resultRequest
 
 	commitChan chan paxosrpc.Command
 
-	stats map[string]mainrpc.Stats
-	toRun map[string]chan struct{}
+	stats    map[string]mainrpc.Stats
+	toRun    map[string]chan bool
+	toReturn *list.List
 }
 
 func (sm *statsMaster) startStatsMaster(cmdChan chan paxosrpc.Command,
@@ -68,34 +77,57 @@ func (sm *statsMaster) startStatsMaster(cmdChan chan paxosrpc.Command,
 				Hostport:      init.hostport,
 			}
 			cmdChan <- cmd
-
-		case res := <-sm.addChan:
+			/*
+				case res := <-sm.addChan:
+					//PAXOS
+					cmd := paxosrpc.Command{
+						Type:          paxosrpc.Update,
+						CommandNumber: -1,
+						GameResult:    res,
+					}
+					cmdChan <- cmd
+			*/
+		case req := <-sm.resultChan:
 			//PAXOS
 			cmd := paxosrpc.Command{
 				Type:          paxosrpc.Update,
 				CommandNumber: -1,
-				GameResult:    res,
+				GameResult:    req.result,
 			}
 			cmdChan <- cmd
+
+			//Save Request
+			sm.toReturn.PushBack(req)
 
 		case cmd := <-sm.commitChan:
 			switch cmd.Type {
 			case paxosrpc.Init:
-				sm.stats[cmd.Player] = initStats(cmd.Player, cmd.Hostport)
+				_, ok := sm.stats[cmd.Player]
 
-				if c, ok := sm.toRun[cmd.Player]; ok {
-					close(c)
-					delete(sm.toRun, cmd.Player)
+				if ok {
+					if c, ok := sm.toRun[cmd.Player]; ok {
+						c <- false
+						delete(sm.toRun, cmd.Player)
+					}
+				} else {
+					sm.stats[cmd.Player] = initStats(cmd.Player, cmd.Hostport)
+
+					if c, ok := sm.toRun[cmd.Player]; ok {
+						c <- true
+						delete(sm.toRun, cmd.Player)
+					}
+					req := new(newAIReq)
+					req.name = cmd.Player
+					req.manage = false
+					req.hostport = cmd.Hostport
+
+					aiChan <- req
 				}
-				req := new(newAIReq)
-				req.name = cmd.Player
-				req.manage = false
-				req.hostport = cmd.Hostport
-
-				aiChan <- req
 
 			case paxosrpc.Update:
 				res := cmd.GameResult
+
+				sm.handleResult(res)
 
 				if _, ok := sm.stats[res.Player1]; !ok {
 					continue
@@ -121,6 +153,20 @@ func (sm *statsMaster) startStatsMaster(cmdChan chan paxosrpc.Command,
 			}
 		}
 
+	}
+}
+
+func (sm *statsMaster) handleResult(res mainrpc.GameResult) {
+	for e := sm.toReturn.Front(); e != nil; e = e.Next() {
+		req := e.Value.(resultRequest)
+		r := req.result
+
+		if r.Player1 == res.Player1 && r.Player2 == res.Player2 {
+			sm.toReturn.Remove(e)
+
+			req.retChan <- mainrpc.OK
+			return
+		}
 	}
 }
 

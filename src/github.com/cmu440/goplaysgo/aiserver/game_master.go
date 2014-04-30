@@ -22,63 +22,100 @@ type initReq struct {
 	retChan  chan bool
 }
 
-type startReq struct {
-	name    string
-	retChan chan mainrpc.GameResult
-}
-
 type moveReq struct {
 	args      *airpc.NextMoveArgs
 	reply     *airpc.NextMoveReply
 	replyChan chan *airpc.NextMoveReply
 }
 
-type gameMaster struct {
-	name string
+type startReq struct {
+	opponents   []airpc.AIPlayer
+	mainServers []string
+}
 
-	checkChan chan checkReq
-	initChan  chan initReq
-	startChan chan startReq
-	moveChan  chan moveReq
+type gameMaster struct {
+	name     string
+	hostport string
+
+	checkChan     chan checkReq
+	initChan      chan initReq
+	startGameChan chan string
+	startChan     chan startReq
+	moveChan      chan moveReq
 
 	games map[string]*gameHandler
+
+	mainServers       []string
+	mainServerClients []*rpc.Client
+	oppClients        map[string]*rpc.Client
 }
 
 type gameHandler struct {
 	name     string
 	opponent string
 
-	startChan chan startReq
+	startChan chan string
 	moveChan  chan moveReq
 
 	oppClient *rpc.Client
 	game      gogame.Board
 }
 
+type gameStarter struct {
+	name        string
+	opponents   []airpc.AIPlayer
+	oppClients  []*rpc.Client
+	mainServers []string
+}
+
 func (gm *gameMaster) startGameMaster() {
 	for {
 		select {
 		case req := <-gm.checkChan:
+			LOGV.Println("Game Master:", gm.name, "Checking Game Against", req.name)
 			_, ok := gm.games[req.name]
 			req.retChan <- !ok
 
 		case req := <-gm.initChan:
+			LOGV.Println("Game Master:", gm.name, "Initializing Game Against", req.name)
 			newGame := gm.initGame(req.name, req.hostport, req.size)
 			gm.games[req.name] = newGame
 
-			go newGame.startGameHandler()
+			go newGame.startGameHandler(gm.mainServerClients)
 
 			req.retChan <- true
 
-		case req := <-gm.startChan:
-			game, ok := gm.games[req.name]
+		case req := <-gm.startGameChan:
+			LOGV.Println("Game MAster:", gm.name, "Starting Game Against", req)
+			game, ok := gm.games[req]
 
 			if !ok {
-				LOGE.Println("GameMaster:", "Game between", req.name, "does not exist!")
+				LOGE.Println("GameMaster:", "Game between", req, "does not exist!")
 				continue
 			}
 
 			game.startChan <- req
+
+		case req := <-gm.startChan:
+			LOGV.Println("Game Master:", gm.name, "Starting Games!!")
+			gm.mainServers = req.mainServers
+			gm.mainServerClients = make([]*rpc.Client, len(gm.mainServers))
+
+			for i, s := range gm.mainServers {
+				gm.mainServerClients[i] = initClient(s)
+			}
+
+			gs := new(gameStarter)
+			gs.name = gm.name
+			gs.opponents = req.opponents
+			gs.oppClients = make([]*rpc.Client, len(req.opponents))
+
+			for i, opp := range req.opponents {
+				gs.oppClients[i] = initClient(opp.Hostport)
+				gm.oppClients[opp.Player] = gs.oppClients[i]
+			}
+
+			go gs.startGameStarter(gm.hostport, gm.checkChan, gm.initChan, gm.startGameChan)
 
 		case req := <-gm.moveChan:
 			game, ok := gm.games[req.args.Player]
@@ -98,15 +135,93 @@ func (gm *gameMaster) initGame(name string, hostport string, size int) *gameHand
 	gh := new(gameHandler)
 	gh.name = gm.name
 	gh.opponent = name
-	gh.startChan = make(chan startReq)
+	gh.startChan = make(chan string)
 	gh.moveChan = make(chan moveReq)
-	gh.oppClient = initClient(hostport)
+	client, ok := gm.oppClients[name]
+
+	if !ok {
+		client = initClient(hostport)
+		gm.oppClients[name] = client
+	}
+
+	gh.oppClient = client
+
 	gh.game = gogame.MakeBoard(size)
 
 	return gh
 }
 
-func (gh *gameHandler) startGameHandler() {
+func (gs *gameStarter) startGameStarter(hostport string, checkChan chan checkReq, initChan chan initReq, startChan chan string) {
+	LOGV.Println("GameStarter:", gs.name, "STARIGN!!")
+
+	for i, opp := range gs.opponents {
+		if opp.Player == gs.name {
+			continue
+		}
+
+		go gs.startGame(i, hostport, checkChan, initChan, startChan, opp)
+	}
+}
+func (gs *gameStarter) startGame(i int, hostport string, checkChan chan checkReq,
+	initChan chan initReq, startChan chan string, opp airpc.AIPlayer) {
+
+	cReq := checkReq{retChan: make(chan bool)}
+	var checkArgs airpc.CheckArgs = airpc.CheckArgs{gs.name}
+	var checkReply airpc.CheckReply
+
+	iReq := initReq{
+		size:    gogame.Small,
+		retChan: make(chan bool),
+	}
+	var initArgs airpc.InitGameArgs = airpc.InitGameArgs{gs.name, hostport, gogame.Small}
+	var initReply airpc.InitGameReply
+
+	LOGV.Println("GameStarter:", gs.name, "Next Opp:", opp.Player)
+	client := gs.oppClients[i]
+
+	if client == nil {
+		return
+	}
+
+	// Check Phase
+	LOGV.Println("GameStarter:", gs.name, "v", opp.Player, "Checking")
+	cReq.name = opp.Player
+	checkChan <- cReq
+	if !<-(cReq.retChan) {
+		return
+	}
+
+	err := client.Call("AIServer.CheckGame", &checkArgs, &checkReply)
+
+	if err != nil || checkReply.Status != airpc.OK {
+		LOGE.Println("GameStarter:", "Failed while checking with",
+			opp.Player, "error:", err, "status", checkReply.Status)
+		return
+	}
+
+	// Init Phase
+	LOGV.Println("GameStarter:", gs.name, "v", opp.Player, "Initializing")
+	iReq.name = opp.Player
+	iReq.hostport = opp.Hostport
+	initChan <- iReq
+	if !<-(iReq.retChan) {
+		return
+	}
+
+	err = client.Call("AIServer.InitGame", &initArgs, &initReply)
+
+	if err != nil || initReply.Status != airpc.OK {
+		LOGE.Println("GameStarter:", "Failed to Init with",
+			opp.Player, "error:", err, "status", initReply.Status)
+		return
+	}
+
+	//Start Phase
+	LOGV.Println("GameStarter:", gs.name, "v", opp.Player, "Starting")
+	startChan <- opp.Player
+}
+
+func (gh *gameHandler) startGameHandler(mainServers []*rpc.Client) {
 	for {
 		select {
 		case req := <-gh.moveChan:
@@ -127,8 +242,13 @@ func (gh *gameHandler) startGameHandler() {
 
 			req.replyChan <- req.reply
 
-		case req := <-gh.startChan:
+		case <-gh.startChan:
 			LOGV.Println("GameHandler:", "Starting a Game Between", gh.name, "and", gh.opponent)
+
+			if gh.oppClient == nil {
+				return
+			}
+
 			args := airpc.NextMoveArgs{}
 			args.Player = gh.name
 			var reply airpc.NextMoveReply
@@ -172,15 +292,38 @@ func (gh *gameHandler) startGameHandler() {
 				Points2: gh.game.PlayerPoints(gogame.Black),
 			}
 
-			req.retChan <- result
+			submitArgs := mainrpc.SubmitResultArgs{result}
+			var submitReply mainrpc.SubmitResultReply
+
+			//req.retChan <- result
+			for {
+				for _, c := range mainServers {
+					if c == nil {
+						continue
+					}
+					err := c.Call("MainServer.SubmitResult", &submitArgs, &submitReply)
+
+					if err == nil && submitReply.Status == mainrpc.OK {
+						return
+					}
+
+					LOGE.Println("Error Calling SubmitResult", err)
+					time.Sleep(time.Second)
+				}
+			}
+
+			return
 		}
 	}
 }
 
 func initClient(hostport string) *rpc.Client {
 	client, err := rpc.DialHTTP("tcp", hostport)
+	limit := 0
 
-	for err != nil {
+	for err != nil && limit < 20 {
+		LOGV.Println("InitClient, retrying", err)
+		limit++
 		time.Sleep(time.Second)
 		client, err = rpc.DialHTTP("tcp", hostport)
 	}

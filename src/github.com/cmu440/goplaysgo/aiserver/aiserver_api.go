@@ -29,7 +29,7 @@ type AIServer interface {
 	// in the game. From hereon, the AI servers will communicate with
 	// each other, and once they are done, return the results to the
 	// main server.
-	StartGame(*airpc.StartGameArgs, *airpc.StartGameReply) error
+	StartGames(*airpc.StartGamesArgs, *airpc.StartGamesReply) error
 
 	//TODO decide which AI server should reply to the main server
 	// Choices: 1) The server that wins (require separate rpc to main_

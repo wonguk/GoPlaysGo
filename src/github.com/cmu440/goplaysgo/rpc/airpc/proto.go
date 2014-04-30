@@ -65,3 +65,17 @@ type StartGameReply struct {
 	Status Status
 	Result mainrpc.GameResult
 }
+
+type AIPlayer struct {
+	Player   string
+	Hostport string
+}
+
+type StartGamesArgs struct {
+	Opponents []AIPlayer
+	Servers   []string
+}
+
+type StartGamesReply struct {
+	Status Status
+}

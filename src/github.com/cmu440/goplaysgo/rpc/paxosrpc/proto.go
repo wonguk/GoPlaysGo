@@ -8,6 +8,7 @@ const (
 	OK Status = iota + 1
 	NotReady
 	Reject
+	WrongServer
 )
 
 const (
@@ -58,4 +59,29 @@ type CommitArgs struct {
 
 type CommitReply struct {
 	Status Status
+}
+
+type QuieseType int
+
+const (
+	Setup QuieseType = iota + 1
+	Sync
+	Replace
+	CatchUp
+)
+
+type QuieseArgs struct {
+	Type          QuieseType
+	CommandNumber int
+	Master        bool
+	ToReplace     []string
+	ToAdd         []string
+	Commands      []Command
+	Servers       []string
+}
+
+type QuieseReply struct {
+	Status        Status
+	Servers       []string
+	CommandNumber int
 }

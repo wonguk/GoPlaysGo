@@ -46,11 +46,13 @@ var (
 var LOGE = log.New(os.Stderr, "", log.Lshortfile|log.Lmicroseconds)
 
 var master = flag.String("port", "localhost:9099", "Hostport of master server")
+var aiMap = make(map[string]bool)
 
 func main() {
 	tests := []testFunc{
 		{"testNormalSingle", testNormalSingle},
 		{"testNormalMultiple", testNormalMultiple},
+		{"testCompileError", testCompileError},
 		{"testDuplicateSingle", testDuplicateSingle},
 		{"testDuplicateMultiple", testDuplicateMultiple},
 	}
@@ -139,38 +141,49 @@ func testNormalSingle() {
 	c := mt.servers[0]
 
 	c.SubmitAI(getNextAI(), "ai_example/ai_random.go")
-	time.Sleep(time.Second)
-	checkStandings(c)
-
 	c.SubmitAI(getNextAI(), "ai_example/ai_random.go")
-	time.Sleep(time.Second)
-	checkStandings(c)
-
 	c.SubmitAI(getNextAI(), "ai_example/ai_random.go")
-	time.Sleep(time.Second)
-	checkStandings(c)
-
 	c.SubmitAI(getNextAI(), "ai_example/ai_random.go")
-	time.Sleep(time.Second)
-	checkStandings(c)
 
-	time.Sleep(time.Second)
+	time.Sleep(5 * time.Second)
+	checkStandings(c)
 }
 
 func testNormalMultiple() {
 	for _, c := range mt.servers {
 		c.SubmitAI(getNextAI(), "ai_example/ai_random.go")
-		time.Sleep(time.Second)
-		for _, s := range mt.servers {
-			checkStandings(s)
-		}
 	}
+
+	time.Sleep(10 * time.Second)
+	for _, s := range mt.servers {
+		checkStandings(s)
+	}
+
+}
+
+func testCompileError() {
+	c := mt.servers[0]
+
+	reply, err := c.SubmitAI(getNextAI(), "ai_example/ai_compile_error.go")
+
+	if err != nil {
+		return
+	}
+
+	if reply.Status != mainrpc.CompileError {
+		failCount++
+		return
+	}
+
+	passCount++
+	fmt.Println("PASS")
 }
 
 func testDuplicateSingle() {
 	c := mt.servers[0]
 
-	reply, err := c.SubmitAI(getCurAI(), "ai_example/ai_random.go")
+	reply, err := c.SubmitAI(getNextAI(), "ai_example/ai_random.go")
+	reply, err = c.SubmitAI(getCurAI(), "ai_example/ai_random.go")
 
 	if err != nil {
 		return
@@ -187,15 +200,18 @@ func testDuplicateSingle() {
 }
 
 func testDuplicateMultiple() {
-	for _, c := range mt.servers {
-		reply, err := c.SubmitAI(getCurAI(), "ai_example/ai_random.go")
+	reply, err := mt.servers[0].SubmitAI(getNextAI(), "ai_example/ai_random.go")
+	for i, c := range mt.servers {
+		reply, err = c.SubmitAI(getCurAI(), "ai_example/ai_random.go")
 
 		if err != nil {
-			return
+			continue
 		}
 
 		if reply.Status != mainrpc.AIExists {
-			LOGE.Println("There are Duplicate AIs in Server")
+			r, _ := c.GetStandings()
+			LOGE.Println(getCurAI())
+			LOGE.Println("There are Duplicate AIs in Server", i, r.Standings)
 			failCount++
 			return
 		}
@@ -213,3 +229,14 @@ func getNextAI() string {
 	numAIs++
 	return "test" + strconv.Itoa(numAIs)
 }
+
+/*
+func submitAI(c goclient.GoClient, name string, file string) (*mainrpc.SubmitAIReply, error) {
+	reply, err := c.SubmitAI(name, file)
+
+	if reply.Status == mainrpc.OK {
+		aiMap[name] = true
+	} else {
+		aiMap[name] = false
+	}
+}*/

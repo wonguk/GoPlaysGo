@@ -13,4 +13,7 @@ type PaxosServer interface {
 
 	// Commit Sends a message to a server in the paxos ring to update a given value
 	Commit(*paxosrpc.CommitArgs, *paxosrpc.CommitReply)
+
+	// Quiese supports manually replacing servers
+	Quiese(*paxosrpc.QuieseArgs, *paxosrpc.QuieseReply)
 }

@@ -19,4 +19,7 @@ type MainServer interface {
 	// GetStandings returns the current standings of the different AIs
 	// in the server.
 	GetStandings(*mainrpc.GetStandingsArgs, *mainrpc.GetStandingsReply) error
+
+	// SubmitResult is called by an AI that has finished its game
+	SubmitResult(*mainrpc.SubmitResultArgs, *mainrpc.SubmitResultReply) error
 }

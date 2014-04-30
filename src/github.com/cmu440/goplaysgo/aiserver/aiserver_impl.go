@@ -10,11 +10,11 @@ import (
 	"strconv"
 
 	"github.com/cmu440/goplaysgo/rpc/airpc"
-	"github.com/cmu440/goplaysgo/rpc/mainrpc"
+	//"github.com/cmu440/goplaysgo/rpc/mainrpc"
 )
 
-var logfile, _ = os.OpenFile("log/AITest.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-var errfile, _ = os.OpenFile("log/AITest.err", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+var logfile, _ = os.OpenFile("logs/AITest.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+var errfile, _ = os.OpenFile("logs/AITest.err", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 
 // Error Log
 var LOGE = log.New(errfile, "ERROR [AIServer] ",
@@ -41,11 +41,15 @@ func NewAIServer(name string, port int, mainServerPort string) (AIServer, error)
 
 	gm := new(gameMaster)
 	gm.name = name
-	gm.checkChan = make(chan checkReq)
-	gm.initChan = make(chan initReq)
+	gm.hostport = as.hostport
+	gm.checkChan = make(chan checkReq, 100)
+	gm.initChan = make(chan initReq, 100)
+	gm.startGameChan = make(chan string, 100)
 	gm.startChan = make(chan startReq)
-	gm.moveChan = make(chan moveReq)
+	gm.moveChan = make(chan moveReq, 100)
 	gm.games = make(map[string]*gameHandler)
+
+	gm.oppClients = make(map[string]*rpc.Client)
 
 	as.gm = gm
 
@@ -120,6 +124,7 @@ func (as *aiServer) InitGame(args *airpc.InitGameArgs, reply *airpc.InitGameRepl
 	return nil
 }
 
+/*
 func (as *aiServer) StartGame(args *airpc.StartGameArgs, reply *airpc.StartGameReply) error {
 	LOGV.Println("StartGame:", "Starting Game Between", as.name, "and", args.Player)
 	//NOTE: The Player who starts the should make a WHITE Move
@@ -134,6 +139,16 @@ func (as *aiServer) StartGame(args *airpc.StartGameArgs, reply *airpc.StartGameR
 
 	reply.Status = airpc.OK
 	reply.Result = <-retChan
+
+	return nil
+}*/
+
+func (as *aiServer) StartGames(args *airpc.StartGamesArgs, reply *airpc.StartGamesReply) error {
+	LOGV.Println("StartGames:", "Recieved Start Games Request")
+	LOGV.Println("StartGames:", len(args.Opponents), "Opponents and", len(args.Servers), "Servers")
+	as.gm.startChan <- startReq{args.Opponents, args.Servers}
+
+	reply.Status = airpc.OK
 
 	return nil
 }
