@@ -143,7 +143,6 @@ func (bd *Board) FindStoneChain(move Move, player Player, chain []int, count int
 	return chain, count
 }
 
-
 //CountTerritory() -goes through the chain of pieces and counts the ammount of terrority that they it has
 func (bd *Board) CountTerritory(pieces []int, count int) int {
 	TCount := 0
@@ -221,7 +220,7 @@ func (bd *Board) MakeMove(player Player, move Move) {
 				}
 			}
 		}
-		bd.Passed = 0
+		//bd.Passed = 0
 		bd.Turn++
 		return
 	}

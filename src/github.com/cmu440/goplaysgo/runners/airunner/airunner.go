@@ -20,7 +20,7 @@ func init() {
 func main() {
 	flag.Parse()
 
-	_, err := aiserver.NewAIServer(*name, *port, *mainHostPort)
+	_, err := aiserver.NewAIServer(*name, *port)
 	if err != nil {
 		log.Fatalln("Failed to create storage server:", err)
 	}

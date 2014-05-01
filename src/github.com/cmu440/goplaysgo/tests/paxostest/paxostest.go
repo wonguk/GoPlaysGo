@@ -99,6 +99,7 @@ func initClients() []*rpc.Client {
 	}
 }
 
+// testNormal tests the normal successful sequence of events in the Paxos protocol
 func testNormal() {
 	pt.n++
 	pt.cmdNum++
@@ -198,6 +199,8 @@ func testNormal() {
 	passCount++
 }
 
+// testFailPrepare checks taht if there was a prepare of a greater n
+// before, the current one is rejected
 func testFailPrepare() {
 	pt.n++
 	pt.cmdNum++
@@ -242,6 +245,8 @@ func testFailPrepare() {
 	passCount++
 }
 
+// testFailAccept tests that if there is a new prepare, then the
+// old prepare command is rejected in the accept phase
 func testFailAccept() {
 	pt.n++
 	pt.cmdNum++
@@ -317,6 +322,12 @@ func testFailAccept() {
 	passCount++
 }
 
+// testCatchUp simulates the situation where the network fails and only parts of the
+// system commits values. The test specifically commits command number 1 at to the
+// first half of the system, and the command number 2 to the second half of the
+// system. Then it commits command 3 to the whole system for the case where the
+// network comes back online. Afterwards, the test checks that the three commands
+// have been commited to all the servers.
 func testCatchup() {
 	// No need to test "catching up" with single server
 	if len(pt.servers) == 1 {
@@ -338,7 +349,7 @@ func testCatchup() {
 	}
 
 	commitCmd(cmd1, pt.n, pt.cmdNum, pt.servers[0:len(pt.servers)/2+1], numServers)
-	pt.n += 30
+	pt.n += 30 // Just to be safe :)
 	pt.cmdNum++
 
 	cmd2 := paxosrpc.Command{
@@ -373,6 +384,10 @@ func testCatchup() {
 	passCount++
 }
 
+// It checks that the given Command has been commited by giving the
+// server the command number with a greater n, which should make the
+// servers return the command at the specified command number. We can
+// then make sure the given command are equal to the command returned
 func checkCommited(cmd paxosrpc.Command, n int, servers []*rpc.Client) {
 	pArgs := paxosrpc.PrepareArgs{n, cmd.CommandNumber}
 	var pReply paxosrpc.PrepareReply
@@ -402,6 +417,10 @@ func checkCommited(cmd paxosrpc.Command, n int, servers []*rpc.Client) {
 	passCount++
 }
 
+// Commits the given command to the given servers
+// This function will work regardless of how many servers there are because
+// the servers will think that the test is following the PAXOS rules, meaning
+// that the servers thinks that the majority agreed to the prepare/accept messages
 func commitCmd(cmd paxosrpc.Command, n int, numCmd int, servers []*rpc.Client, numServers int) {
 	// Prepare Phase
 	pArgs := paxosrpc.PrepareArgs{n, numCmd}

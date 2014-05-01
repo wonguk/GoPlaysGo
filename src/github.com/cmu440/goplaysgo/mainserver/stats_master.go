@@ -32,8 +32,7 @@ type statsMaster struct {
 	reqChan    chan statsRequest
 	allReqChan chan allStatsRequest
 
-	initChan chan initRequest
-	//addChan  chan mainrpc.GameResult
+	initChan   chan initRequest
 	resultChan chan resultRequest
 
 	commitChan chan paxosrpc.Command
@@ -42,6 +41,10 @@ type statsMaster struct {
 	toRun    map[string]chan bool
 	toReturn *list.List
 }
+
+// Stats Master
+// The stats master is responsible for saving all the AIs and their result data.
+// Data is added to the Stats Master only if it has been commited in the paxos ring.
 
 func (sm *statsMaster) startStatsMaster(cmdChan chan paxosrpc.Command,
 	aiChan chan *newAIReq) {
@@ -77,16 +80,6 @@ func (sm *statsMaster) startStatsMaster(cmdChan chan paxosrpc.Command,
 				Hostport:      init.hostport,
 			}
 			cmdChan <- cmd
-			/*
-				case res := <-sm.addChan:
-					//PAXOS
-					cmd := paxosrpc.Command{
-						Type:          paxosrpc.Update,
-						CommandNumber: -1,
-						GameResult:    res,
-					}
-					cmdChan <- cmd
-			*/
 		case req := <-sm.resultChan:
 			//PAXOS
 			cmd := paxosrpc.Command{
@@ -130,10 +123,10 @@ func (sm *statsMaster) startStatsMaster(cmdChan chan paxosrpc.Command,
 				sm.handleResult(res)
 
 				if _, ok := sm.stats[res.Player1]; !ok {
-					continue
+					sm.stats[res.Player1] = initStats(res.Player1, "")
 				}
 				if _, ok := sm.stats[res.Player2]; !ok {
-					continue
+					sm.stats[res.Player2] = initStats(res.Player2, "")
 				}
 
 				switch {

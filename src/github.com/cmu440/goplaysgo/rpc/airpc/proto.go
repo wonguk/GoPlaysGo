@@ -79,3 +79,11 @@ type StartGamesArgs struct {
 type StartGamesReply struct {
 	Status Status
 }
+
+type UpdateArgs struct {
+	Servers []string
+}
+
+type UpdateReply struct {
+	Status Status
+}

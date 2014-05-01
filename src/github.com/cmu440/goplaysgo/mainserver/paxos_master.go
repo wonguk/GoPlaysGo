@@ -33,7 +33,12 @@ type maxReply struct {
 
 type doneRequest struct {
 	cmdNum  int
-	retChan chan chan bool
+	retChan chan doneReply
+}
+
+type doneReply struct {
+	cmdNum int
+	done   chan bool
 }
 
 type cmdRequest struct {
@@ -58,6 +63,7 @@ type paxosMaster struct {
 	getCmdChan  chan cmdRequest
 	doneChan    chan doneRequest
 	maxChan     chan maxRequest
+	serverChan  chan []node
 
 	servers []node
 }
@@ -77,6 +83,13 @@ type commitHandler struct {
 	command paxosrpc.Command
 }
 
+// Paxos Master
+// The Paxos Master is responsible for communicating with the other Main Servers
+// in the Paxos ring and commiting values that have been requested locally and
+// from other servers in the ring.
+// The Paxos Master keeps track of all the commands that have been commited until
+// now and makes sure that for each command, the previous command has been run.
+
 func (pm *paxosMaster) startPaxosMaster(statsChan chan paxosrpc.Command) {
 	// Mark Initial command as done (so first command can run)
 	LOGV.Println("PaxosMaster:", "Starting Paxos Master!")
@@ -95,6 +108,7 @@ func (pm *paxosMaster) startPaxosMaster(statsChan chan paxosrpc.Command) {
 			}
 
 		case c := <-pm.commandChan:
+			// Requesting a Paxos Commit
 			LOGV.Println("PaxosMaster:", "Recieved Command", c.CommandNumber, c.Type)
 
 			if c.CommandNumber == -1 {
@@ -116,6 +130,7 @@ func (pm *paxosMaster) startPaxosMaster(statsChan chan paxosrpc.Command) {
 			go ph.startHandler(pm.nChan, pm.commandChan, pm.commitChan, pm.servers)
 
 		case p := <-pm.prepareChan:
+			// Prepare Request
 			LOGV.Println("PaxosMaster:", "Recieved Prepare", p.n)
 
 			n, ok := pm.n[p.cmdNum]
@@ -154,6 +169,7 @@ func (pm *paxosMaster) startPaxosMaster(statsChan chan paxosrpc.Command) {
 			close(p.retChan)
 
 		case a := <-pm.acceptChan:
+			// Accept Request
 			LOGV.Println("PaxosMAster:", "Recieved Accept", a.n)
 			n, ok := pm.n[a.command.CommandNumber]
 
@@ -176,29 +192,32 @@ func (pm *paxosMaster) startPaxosMaster(statsChan chan paxosrpc.Command) {
 			close(a.retChan)
 
 		case cmd := <-pm.commitChan:
-			LOGV.Println("PaxosMaster:", "Recieved Commit", cmd)
+			// Commit Request
+			LOGS.Println("PaxosMaster:", "Recieved Commit", cmd)
 			if cmd.CommandNumber > pm.maxCmdNum {
 				pm.maxCmdNum = cmd.CommandNumber
 			}
 
 			if _, ok := pm.commands[cmd.CommandNumber]; !ok {
-				LOGV.Println("PaxosMaster:", "Updaing Command!")
-				//Check Prev Commands filled up
+				LOGS.Println("PaxosMaster:", "Updaing Command!")
 
+				// Update Commands
 				pm.commands[cmd.CommandNumber] = cmd
 				done, ok := pm.cmdDone[cmd.CommandNumber]
 
 				if !ok {
+					LOGS.Println("PaxosMaster:", "Initializing Done Chan for", cmd.CommandNumber)
 					done = make(chan bool, 1)
 					pm.cmdDone[cmd.CommandNumber] = done
 				}
 
 				ch := commitHandler{done, cmd}
 
+				//Check Prev Commands filled up
 				prevDone, ok := pm.cmdDone[cmd.CommandNumber-1]
 
 				if !ok {
-					LOGV.Println("PaxosMaster:", "Initializing Prev Step", cmd.CommandNumber-1)
+					LOGS.Println("PaxosMaster:", "Initializing Prev Step", cmd.CommandNumber-1)
 					prevDone = make(chan bool, 1)
 					pm.cmdDone[cmd.CommandNumber-1] = prevDone
 
@@ -213,14 +232,17 @@ func (pm *paxosMaster) startPaxosMaster(statsChan chan paxosrpc.Command) {
 			}
 
 		case req := <-pm.doneChan:
+			LOGS.Println("PaxosMaster:", "Setup Done Chan", req.cmdNum)
 			done, ok := pm.cmdDone[req.cmdNum]
 
 			if !ok {
-				done := make(chan bool)
+				LOGS.Println("PaxosMaster:", "Making new Done Chan", req.cmdNum)
+				done = make(chan bool)
 				pm.cmdDone[req.cmdNum] = done
 			}
 
-			req.retChan <- done
+			reply := doneReply{req.cmdNum, done}
+			req.retChan <- reply
 
 		case req := <-pm.maxChan:
 			done, ok := pm.cmdDone[pm.maxCmdNum]
@@ -240,6 +262,9 @@ func (pm *paxosMaster) startPaxosMaster(statsChan chan paxosrpc.Command) {
 				cmds[i] = c
 			}
 			req.retChan <- cmds
+
+		case servers := <-pm.serverChan:
+			pm.servers = servers
 		}
 	}
 }
@@ -248,13 +273,11 @@ func (pm *paxosMaster) startPaxosMaster(statsChan chan paxosrpc.Command) {
 // Once the previous commands have been run, it runs the relevant command
 func (ch *commitHandler) startHandler(done chan bool, commitChan chan paxosrpc.Command) {
 	LOGV.Println("CommitHandler:", "Waiting for prevTask to be done!", ch.command.CommandNumber)
-	_, ok := <-done
+	<-done
 
-	if !ok {
-		LOGV.Println("CommitHandler:", "PrevTask for", ch.command.CommandNumber, "is Done!")
-		commitChan <- ch.command
-		close(ch.done)
-	}
+	LOGS.Println("CommitHandler:", "PrevTask for", ch.command.CommandNumber, "is Done!")
+	commitChan <- ch.command
+	close(ch.done)
 }
 
 // paxosHandler basically runs the Paxos protocol(?) on the given command
@@ -288,6 +311,9 @@ func (ph *paxosHandler) prepare(nChan chan cn, cmdChan chan paxosrpc.Command,
 	pArgs := paxosrpc.PrepareArgs{ph.n, ph.command.CommandNumber}
 
 	for _, s := range servers {
+		if s.client == nil {
+			continue
+		}
 		var pReply paxosrpc.PrepareReply
 		call := s.client.Go("PaxosServer.Prepare", &pArgs, &pReply, nil)
 
@@ -359,6 +385,9 @@ func (ph *paxosHandler) accept(cmdChan chan paxosrpc.Command, servers []node) bo
 
 	aArgs := paxosrpc.AcceptArgs{ph.n, ph.command}
 	for _, s := range servers {
+		if s.client == nil {
+			continue
+		}
 		var aReply paxosrpc.AcceptReply
 		call := s.client.Go("PaxosServer.Accept", &aArgs, &aReply, nil)
 
@@ -403,6 +432,9 @@ func (ph *paxosHandler) commit(cmtChan chan paxosrpc.Command, servers []node) {
 
 	cArgs := paxosrpc.CommitArgs{ph.n, ph.command}
 	for _, s := range servers {
+		if s.client == nil {
+			continue
+		}
 		var cReply paxosrpc.CommitReply
 		s.client.Go("PaxosServer.Commit", &cArgs, &cReply, nil)
 	}

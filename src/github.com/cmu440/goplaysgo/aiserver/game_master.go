@@ -2,6 +2,7 @@ package aiserver
 
 import (
 	"net/rpc"
+	"sync"
 	"time"
 
 	"github.com/cmu440/goplaysgo/ai"
@@ -42,9 +43,12 @@ type gameMaster struct {
 	startGameChan chan string
 	startChan     chan startReq
 	moveChan      chan moveReq
+	serverChan    chan []string
+	resultChan    chan mainrpc.GameResult
 
 	games map[string]*gameHandler
 
+	serverLock        sync.Mutex
 	mainServers       []string
 	mainServerClients []*rpc.Client
 	oppClients        map[string]*rpc.Client
@@ -62,11 +66,17 @@ type gameHandler struct {
 }
 
 type gameStarter struct {
-	name        string
-	opponents   []airpc.AIPlayer
-	oppClients  []*rpc.Client
-	mainServers []string
+	name       string
+	opponents  []airpc.AIPlayer
+	oppClients []*rpc.Client
 }
+
+// Game Master
+// The Game Master in the AI server is responsible for keeping track of all the
+// games the AI is playing. So the Game Master basically saves all the opponents
+// the the game state against the opponent. In this implementation, the AI Servers
+// are the referees themselves, and evaluate the game accoring to the logic
+// specified in the gogame package
 
 func (gm *gameMaster) startGameMaster() {
 	for {
@@ -81,7 +91,7 @@ func (gm *gameMaster) startGameMaster() {
 			newGame := gm.initGame(req.name, req.hostport, req.size)
 			gm.games[req.name] = newGame
 
-			go newGame.startGameHandler(gm.mainServerClients)
+			go newGame.startGameHandler(gm.resultChan)
 
 			req.retChan <- true
 
@@ -98,12 +108,14 @@ func (gm *gameMaster) startGameMaster() {
 
 		case req := <-gm.startChan:
 			LOGV.Println("Game Master:", gm.name, "Starting Games!!")
+			gm.serverLock.Lock()
 			gm.mainServers = req.mainServers
 			gm.mainServerClients = make([]*rpc.Client, len(gm.mainServers))
 
 			for i, s := range gm.mainServers {
 				gm.mainServerClients[i] = initClient(s)
 			}
+			gm.serverLock.Unlock()
 
 			gs := new(gameStarter)
 			gs.name = gm.name
@@ -127,6 +139,41 @@ func (gm *gameMaster) startGameMaster() {
 			}
 
 			game.moveChan <- req
+		case result := <-gm.resultChan:
+			submitArgs := mainrpc.SubmitResultArgs{result}
+			var submitReply mainrpc.SubmitResultReply
+
+			send := false
+			gm.serverLock.Lock()
+			for _, c := range gm.mainServerClients {
+				if c == nil {
+					continue
+				}
+
+				err := c.Call("MainServer.SubmitResult", &submitArgs, &submitReply)
+
+				if err == nil && submitReply.Status == mainrpc.OK {
+					send = true
+					break
+				}
+
+				LOGE.Println("Error Calling SubmitResult", err)
+				time.Sleep(time.Second)
+			}
+			gm.serverLock.Unlock()
+
+			if !send {
+				gm.resultChan <- result
+			}
+		case servers := <-gm.serverChan:
+			gm.serverLock.Lock()
+			gm.mainServers = servers
+			gm.mainServerClients = make([]*rpc.Client, len(gm.mainServers))
+
+			for i, s := range gm.mainServers {
+				gm.mainServerClients[i] = initClient(s)
+			}
+			gm.serverLock.Unlock()
 		}
 	}
 }
@@ -151,6 +198,7 @@ func (gm *gameMaster) initGame(name string, hostport string, size int) *gameHand
 	return gh
 }
 
+// Starts initializing games against the opponents
 func (gs *gameStarter) startGameStarter(hostport string, checkChan chan checkReq, initChan chan initReq, startChan chan string) {
 	LOGV.Println("GameStarter:", gs.name, "STARIGN!!")
 
@@ -162,6 +210,10 @@ func (gs *gameStarter) startGameStarter(hostport string, checkChan chan checkReq
 		go gs.startGame(i, hostport, checkChan, initChan, startChan, opp)
 	}
 }
+
+// For the Specified Opponent, makes sure that both the AI server itself and
+// the opponent are ready to play, and initializes the board on both servers,
+// and starts the game. In this matter, there is a 2PC like protocol going on.
 func (gs *gameStarter) startGame(i int, hostport string, checkChan chan checkReq,
 	initChan chan initReq, startChan chan string, opp airpc.AIPlayer) {
 
@@ -221,7 +273,13 @@ func (gs *gameStarter) startGame(i int, hostport string, checkChan chan checkReq
 	startChan <- opp.Player
 }
 
-func (gh *gameHandler) startGameHandler(mainServers []*rpc.Client) {
+// The Game Handler takes care of a single game.
+// If the AI server is not the one that started the game, the game handler
+// simply waits for the other AI server to send the move they made, makes
+// a move, and returns the move made.
+// If the AI server is the one that started the game, the game handler
+// basically does the above in a loop until the game ends.
+func (gh *gameHandler) startGameHandler(resultChan chan mainrpc.GameResult) {
 	for {
 		select {
 		case req := <-gh.moveChan:
@@ -284,7 +342,7 @@ func (gh *gameHandler) startGameHandler(mainServers []*rpc.Client) {
 			}
 
 			LOGV.Println("GameHandler:", "Returning Result of Game between", gh.name, ",", gh.opponent)
-			// Return Game Result
+			// Return Game Result to the Game Master to send to a MainServer
 			result := mainrpc.GameResult{
 				Player1: gh.name,
 				Player2: gh.opponent,
@@ -292,26 +350,7 @@ func (gh *gameHandler) startGameHandler(mainServers []*rpc.Client) {
 				Points2: gh.game.PlayerPoints(gogame.Black),
 			}
 
-			submitArgs := mainrpc.SubmitResultArgs{result}
-			var submitReply mainrpc.SubmitResultReply
-
-			//req.retChan <- result
-			for {
-				for _, c := range mainServers {
-					if c == nil {
-						continue
-					}
-					err := c.Call("MainServer.SubmitResult", &submitArgs, &submitReply)
-
-					if err == nil && submitReply.Status == mainrpc.OK {
-						return
-					}
-
-					LOGE.Println("Error Calling SubmitResult", err)
-					time.Sleep(time.Second)
-				}
-			}
-
+			resultChan <- result
 			return
 		}
 	}
@@ -321,7 +360,7 @@ func initClient(hostport string) *rpc.Client {
 	client, err := rpc.DialHTTP("tcp", hostport)
 	limit := 0
 
-	for err != nil && limit < 20 {
+	for err != nil && limit < 2 {
 		LOGV.Println("InitClient, retrying", err)
 		limit++
 		time.Sleep(time.Second)

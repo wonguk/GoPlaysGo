@@ -8,12 +8,14 @@ import (
 	"net/rpc"
 	"os"
 	"strconv"
+	"sync"
 
 	"github.com/cmu440/goplaysgo/rpc/airpc"
-	//"github.com/cmu440/goplaysgo/rpc/mainrpc"
+	"github.com/cmu440/goplaysgo/rpc/mainrpc"
 )
 
 var logfile, _ = os.OpenFile("logs/AITest.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+var logfile2, _ = os.OpenFile("logs/AI.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 var errfile, _ = os.OpenFile("logs/AITest.err", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 
 // Error Log
@@ -21,8 +23,8 @@ var LOGE = log.New(errfile, "ERROR [AIServer] ",
 	log.Lmicroseconds|log.Lshortfile)
 
 // Verbose Log
-var LOGV = log.New(logfile, "VERBOSE [AIServer] ",
-	log.Lmicroseconds|log.Lshortfile)
+var LOGV = log.New(logfile, "VERBOSE [AIServer] ", log.Lmicroseconds|log.Lshortfile)
+var LOGT = log.New(logfile2, "VERBOSE [AIServer] ", log.Lmicroseconds|log.Lshortfile)
 
 type aiServer struct {
 	name     string
@@ -32,12 +34,12 @@ type aiServer struct {
 }
 
 // NewAIServer returns an AIServer that plays games with other AI Servers
-func NewAIServer(name string, port int, mainServerPort string) (AIServer, error) {
+func NewAIServer(name string, port int) (AIServer, error) {
 	LOGV.Println("NewAIServer:", "Initializing AI Server for", name, "at", port)
 	as := new(aiServer)
 
 	as.name = name
-	as.hostport = "localhost:" + strconv.Itoa(port) //TODO Change later
+	as.hostport = "localhost:" + strconv.Itoa(port)
 
 	gm := new(gameMaster)
 	gm.name = name
@@ -47,7 +49,11 @@ func NewAIServer(name string, port int, mainServerPort string) (AIServer, error)
 	gm.startGameChan = make(chan string, 100)
 	gm.startChan = make(chan startReq)
 	gm.moveChan = make(chan moveReq, 100)
+	gm.serverChan = make(chan []string, 100)
+	gm.resultChan = make(chan mainrpc.GameResult, 100)
 	gm.games = make(map[string]*gameHandler)
+
+	gm.serverLock = sync.Mutex{}
 
 	gm.oppClients = make(map[string]*rpc.Client)
 
@@ -70,7 +76,6 @@ func NewAIServer(name string, port int, mainServerPort string) (AIServer, error)
 }
 
 func (as *aiServer) NextMove(args *airpc.NextMoveArgs, reply *airpc.NextMoveReply) error {
-	//NOTE: When NextMove is called, always make a BLACK Move
 	replyChan := make(chan *airpc.NextMoveReply)
 	req := moveReq{
 		args:      args,
@@ -124,31 +129,22 @@ func (as *aiServer) InitGame(args *airpc.InitGameArgs, reply *airpc.InitGameRepl
 	return nil
 }
 
-/*
-func (as *aiServer) StartGame(args *airpc.StartGameArgs, reply *airpc.StartGameReply) error {
-	LOGV.Println("StartGame:", "Starting Game Between", as.name, "and", args.Player)
-	//NOTE: The Player who starts the should make a WHITE Move
-	retChan := make(chan mainrpc.GameResult)
-
-	req := startReq{
-		name:    args.Player,
-		retChan: retChan,
-	}
-
-	as.gm.startChan <- req
-
-	reply.Status = airpc.OK
-	reply.Result = <-retChan
-
-	return nil
-}*/
-
 func (as *aiServer) StartGames(args *airpc.StartGamesArgs, reply *airpc.StartGamesReply) error {
+	LOGT.Println("StartGames:", "Opponents:", args.Opponents)
+	LOGT.Println("StartGames:", "Servers:", args.Servers)
 	LOGV.Println("StartGames:", "Recieved Start Games Request")
 	LOGV.Println("StartGames:", len(args.Opponents), "Opponents and", len(args.Servers), "Servers")
 	as.gm.startChan <- startReq{args.Opponents, args.Servers}
 
 	reply.Status = airpc.OK
 
+	return nil
+}
+
+func (as *aiServer) UpdateServers(args *airpc.UpdateArgs, reply *airpc.UpdateReply) error {
+	LOGT.Println("UpdateServers:", args.Servers)
+	as.gm.serverChan <- args.Servers
+
+	reply.Status = airpc.OK
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/cmu440/goplaysgo/rpc/mainrpc"
+	"github.com/cmu440/goplaysgo/rpc/paxosrpc"
 )
 
 type goClient struct {
@@ -66,6 +67,43 @@ func (gc *goClient) GetServers() (mainrpc.GetServersReply, error) {
 	var reply mainrpc.GetServersReply
 
 	err := gc.client.Call("MainServer.GetServers", &args, &reply)
+
+	return reply, err
+}
+
+func (gc *goClient) QuieseSetup() (paxosrpc.QuieseReply, error) {
+	var args paxosrpc.QuieseArgs = paxosrpc.QuieseArgs{
+		Type: paxosrpc.Setup,
+	}
+	var reply paxosrpc.QuieseReply
+
+	err := gc.client.Call("PaxosServer.Quiese", &args, &reply)
+
+	return reply, err
+}
+
+func (gc *goClient) QuieseSync(cmdNum int) (paxosrpc.QuieseReply, error) {
+	var args paxosrpc.QuieseArgs = paxosrpc.QuieseArgs{
+		Type:          paxosrpc.Sync,
+		CommandNumber: cmdNum,
+	}
+	var reply paxosrpc.QuieseReply
+
+	err := gc.client.Call("PaxosServer.Quiese", &args, &reply)
+
+	return reply, err
+}
+
+func (gc *goClient) QuieseReplace(isMaster bool, toAdd []string, toReplace []string) (paxosrpc.QuieseReply, error) {
+	var args paxosrpc.QuieseArgs = paxosrpc.QuieseArgs{
+		Type:      paxosrpc.Replace,
+		ToAdd:     toAdd,
+		ToReplace: toReplace,
+		Master:    isMaster,
+	}
+	var reply paxosrpc.QuieseReply
+
+	err := gc.client.Call("PaxosServer.Quiese", &args, &reply)
 
 	return reply, err
 }
