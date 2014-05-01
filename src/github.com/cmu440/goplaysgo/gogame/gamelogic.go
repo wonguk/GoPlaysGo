@@ -68,7 +68,7 @@ func MakeBoard(size int) Board {
 }
 
 //isLegalMove - Checks the board's grid to see if the given x,y pos is safe to place
-func (bd *Board) isLegalMove(player Player, move Move) int {
+func (bd *Board) IsLegalMove(player Player, move Move) int {
 	if (move.YPos >= len(bd.Grid)) || (move.YPos < 0) {
 		return 0
 	}
@@ -199,7 +199,7 @@ func (bd *Board) MakeMove(player Player, move Move) {
 	PlacedStone := new(Stones)
 	PlacedStone.Player = player
 	PlacedStone.Turn = bd.Turn
-	if bd.isLegalMove(player, move) == 1 {
+	if bd.IsLegalMove(player, move) == 1 {
 		bd.Grid[move.YPos][move.XPos] = *PlacedStone
 		for yindex := 0; yindex < len(bd.Grid); yindex++ {
 			for xindex := 0; xindex < len(bd.Grid); xindex++ {
