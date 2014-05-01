@@ -14,10 +14,10 @@ import (
 	"strings"
 	"sync"
     "github.com/cmu440/goplaysgo/rpc/mainrpc"
-    "github.com/cmu440/goplaysgo/mainserver"
+    "net/rpc"
+    "strconv"
 )
-
-var 
+ 
 
 type Page struct {
 	Title string
@@ -35,6 +35,11 @@ func (p *Page) save() error {
 func loadPage(title string) (*Page, error) {
     filename := "Ai/" + title + ".go"
     body, err := ioutil.ReadFile(filename)
+    fmt.Println(body,len(body))
+    if len(body) == 2 {
+        body = []byte("package ai \n \n" + "import" + " github.com/cmu440/goplaysgo/gogame \n \n" + "func NextMove(board gogame.Board, player gogame.Player) gogame.Move {...}" )
+    }
+    fmt.Println(body)
     if err != nil {
         return nil, err
     }
@@ -110,20 +115,60 @@ func runHandler(w http.ResponseWriter, r *http.Request) {
     /* Enter what ever code we want to show here*/
     ai := new(mainrpc.SubmitAIArgs)
     ai.Name = title
-    ai.Code,err := ioutil.ReadFile("Ai/" + title + ".go") 
-    _,err = ai.init()
+    ai.Code,err = ioutil.ReadFile("Ai/" + title + ".go") 
+    fmt.Println(ai)
     if err != nil {
         http.Redirect(w, r, "/edit/"+title, http.StatusFound)
+        fmt.Println("Error 4:",err)
         return
     }
     aiReply := new(mainrpc.SubmitAIReply)
-
-
-    wg := new(sync.WaitGroup)
-    wg.Add(1)
-    go exe_cmd("test.bat",wg)
-    wg.Wait()
-    p.Body=([]byte("This is one long test of results \n Lets see if it printed a new line!"))
+    client,err :=  rpc.DialHTTP("tcp","71.199.115.110:9099")
+    if err != nil {
+        http.Redirect(w, r, "/edit/"+title, http.StatusFound)
+        fmt.Println("Server offline")
+        return
+    }
+    err = client.Call("MainServer.SubmitAI",ai,aiReply)
+    if err != nil {
+        http.Redirect(w, r, "/edit/"+title, http.StatusFound)
+        fmt.Println("SubmitAI error")
+        return
+    }
+    if aiReply.Status != mainrpc.OK { //Make more cases later
+        http.Redirect(w, r, "/edit/"+title, http.StatusFound)
+        fmt.Println("Error 3:",err,aiReply.Status)
+        return
+    } 
+    Standings := new(mainrpc.GetStandingsArgs)
+    StandingsReply := new(mainrpc.GetStandingsReply)
+    client,err = rpc.DialHTTP("tcp","71.199.115.110:9099")
+    if err != nil {
+        http.Redirect(w, r, "/edit/"+title, http.StatusFound)
+        fmt.Println("client call error")
+        return
+    }
+    err = client.Call("MainServer.GetStandings",Standings,StandingsReply)
+    if err != nil {
+        http.Redirect(w, r, "/edit/"+title, http.StatusFound)
+        fmt.Println("Getting Standings error")
+        fmt.Println("Error 2:",err)
+        return
+    }
+    if StandingsReply.Status != mainrpc.OK { //Make more cases later
+        http.Redirect(w, r, "/edit/"+title, http.StatusFound)
+        fmt.Println("Error 1:",err)
+        return
+    } 
+    var PageResults string = ""
+    ServerStandings := StandingsReply.Standings
+    for AI := 0; AI < len(ServerStandings); AI++ {
+        PageResults = PageResults + "AI: "+ ServerStandings[AI].Name +" got: \n"
+        PageResults = PageResults + "Wins: "+ strconv.Itoa(ServerStandings[AI].Wins) + "\n"
+        PageResults = PageResults + "Losses: "+ strconv.Itoa(ServerStandings[AI].Losses) + "\n"
+        PageResults = PageResults + "Draws: "+ strconv.Itoa(ServerStandings[AI].Draws) + "\n \n"
+    }
+    p.Body=([]byte(PageResults))
 
     renderTemplate(w, "run", p)
 }
