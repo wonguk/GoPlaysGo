@@ -149,7 +149,8 @@ func NextMove(board gogame.Board, player gogame.Player) gogame.Move {
 ...
 }
 
-For more help the user can check example code in the Ai_example folder.
+For more help the user can check example code in the ai_example folder
+and look at the ai/ai_api.go file.
 
 
 -------------------------------------
