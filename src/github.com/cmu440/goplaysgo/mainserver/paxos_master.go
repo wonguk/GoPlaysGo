@@ -265,6 +265,7 @@ func (pm *paxosMaster) startPaxosMaster(statsChan chan paxosrpc.Command) {
 
 		case servers := <-pm.serverChan:
 			pm.servers = servers
+
 		}
 	}
 }

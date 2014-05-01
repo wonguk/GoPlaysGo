@@ -566,7 +566,15 @@ func (ms *mainServer) Quiese(args *paxosrpc.QuieseArgs, reply *paxosrpc.QuieseRe
 		}
 
 		// Tell Masters about new Servers
-		ms.paxosMaster.serverChan <- ms.servers
+		s := make([]node, len(ms.servers)-1)
+		i = 0
+		for _, n := range ms.servers {
+			if n.hostport != ms.hostport {
+				s[i] = n
+				i++
+			}
+		}
+		ms.paxosMaster.serverChan <- s
 		ms.aiMaster.serverChan <- ms.getServers()
 
 		// If Master, tell
