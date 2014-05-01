@@ -41,7 +41,7 @@ func Ai1(board gogame.Board, player gogame.Player) gogame.Move {
 	var y int = 0
 
 	for yindex := 0; yindex < len(board.Grid); yindex++ {
-		for xindex := 0; xindex , len(board.Grid); xindex++ {
+		for xindex := 0; xindex < len(board.Grid); xindex++ {
 			if board.Grid[yindex][xindex].Player != "" {
 				x = xindex
 				y = yindex
@@ -62,7 +62,7 @@ func Ai2(board gogame.Board, player gogame.Player) gogame.Move {
 
 	if board.Grid[y][x].Player != "" {
 		for yindex := y; yindex < len(board.Grid); yindex++ {
-			for xindex := x; xindex , len(board.Grid); xindex++ {
+			for xindex := x; xindex < len(board.Grid); xindex++ {
 				if board.Grid[yindex][xindex].Player != "" {
 					x = xindex
 					y = yindex

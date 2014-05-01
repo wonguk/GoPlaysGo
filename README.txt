@@ -133,6 +133,26 @@ Three are 4 tests included:
 
 
 -------------------------------------
+WebServer/Front End
+-------------------------------------
+The file webserver.go contains code that initiates the user front end website. In order to run this please compile webserver.go then run the application. While it is running in a local browser go to localhost http://localhost:8080/edit/(user) in which (user) is replaced by a username of your choice.
+
+On the first page (edit page) the user can write up go coe for the A.I which should be in the format of:
+package ai
+
+import (
+  "github.com/cmu440/goplaysgo/gogame"
+  ...
+  )
+
+func NextMove(board gogame.Board, player gogame.Player) gogame.Move {
+...
+}
+
+For more help the user can check example code in the Ai_example folder.
+
+
+-------------------------------------
 Design Decisions
 -------------------------------------
 Main Server

@@ -27,15 +27,15 @@ func Ai0(board gogame.Board, player gogame.Player) gogame.Move {
 	var maxT int = 0
 
 	for yindex := y; yindex < len(board.Grid); yindex++ {
-		for xindex := x; xindex , len(board.Grid); xindex++ {
-			if (board.isLegalMove(player,gogame.Move{y,x}) == 1) {
+		for xindex := x; xindex < len(board.Grid); xindex++ {
+			if (board.IsLegalMove(player,gogame.Move{y,x}) == 1) {
 				TestBoard := gogame.MakeBoard(len(board.Grid))
 				TestBoard.Passed = board.Passed
 				TestBoard.Turn = board.Turn
 				TestBoard.Grid = board.Grid
 				TestBoard.MakeMove(player,gogame.Move{y,x})
 				EmptyChain := make([]int, len(board.Grid)*len(board.Grid))
-				StoneChain, ChainLen := TestBoard.FindStoneChain(Move{yindex, xindex}, TestBoard.Grid[yindex][xindex].Player, EmptyChain, 0)
+				StoneChain, ChainLen := TestBoard.FindStoneChain(gogame.Move{yindex, xindex}, TestBoard.Grid[yindex][xindex].Player, EmptyChain, 0)
 				TerrorityCount := TestBoard.CountTerritory(StoneChain, ChainLen)
 				if TerrorityCount > maxT {
 					x = xindex
@@ -52,8 +52,8 @@ func Ai0(board gogame.Board, player gogame.Player) gogame.Move {
 }
 
 func Ai1(board gogame.Board, player gogame.Player) gogame.Move {
-	//var x int = 0
-	//var y int = 0
+	var x int = 0
+	var y int = 0
 	var OpponentX int = 0
 	var OpponentY int = 0
 	var maxT int = 0
@@ -66,10 +66,10 @@ func Ai1(board gogame.Board, player gogame.Player) gogame.Move {
 	}
 
 	for yindex := y; yindex < len(board.Grid); yindex++ {
-		for xindex := x; xindex , len(board.Grid); xindex++ {
+		for xindex := x; xindex < len(board.Grid); xindex++ {
 			if (board.Grid[y][x].Player == Opponent) {
 			EmptyChain := make([]int, len(board.Grid)*len(board.Grid))
-			StoneChain, ChainLen := board.FindStoneChain(Move{yindex, xindex}, board.Grid[yindex][xindex].Player, EmptyChain, 0)
+			StoneChain, ChainLen := board.FindStoneChain(gogame.Move{yindex, xindex}, board.Grid[yindex][xindex].Player, EmptyChain, 0)
 			TerrorityCount := board.CountTerritory(StoneChain, ChainLen)
 			if TerrorityCount > maxT {
 				OpponentX = xindex
@@ -79,28 +79,28 @@ func Ai1(board gogame.Board, player gogame.Player) gogame.Move {
 		}
 	}
 
-	if (board.isLegalMove(player,gogame.Move{OpponentY-1,OpponentX})) {
+	if (board.IsLegalMove(player,gogame.Move{OpponentY-1,OpponentX}))==1 {
 		return gogame.Move{
 		YPos: OpponentY-1,
 		XPos: OpponentX,
 		}
 	}
 
-	if (board.isLegalMove(player,gogame.Move{OpponentY+1,OpponentX})) {
+	if (board.IsLegalMove(player,gogame.Move{OpponentY+1,OpponentX}))==1 {
 		return gogame.Move{
 		YPos: OpponentY+1,
 		XPos: OpponentX,
 		}
 	}
 
-	if (board.isLegalMove(player,gogame.Move{OpponentY,OpponentX+1})) {
+	if (board.IsLegalMove(player,gogame.Move{OpponentY,OpponentX+1}))==1 {
 		return gogame.Move{
 		YPos: OpponentY,
 		XPos: OpponentX+1,
 		}
 	}
 
-	if (board.isLegalMove(player,gogame.Move{OpponentY,OpponentX-1})) {
+	if (board.IsLegalMove(player,gogame.Move{OpponentY,OpponentX-1}))==1 {
 		return gogame.Move{
 		YPos: OpponentY,
 		XPos: OpponentX-1,
@@ -118,37 +118,37 @@ func Ai2(board gogame.Board,player gogame.Player) gogame.Move {
 	var LastX int
 	var LastY int
 
-	for yindex := y; yindex < len(board.Grid); yindex++ {
-		for xindex := x; xindex , len(board.Grid); xindex++ {
-			if (board.Grid[y][x].Turn == board.Turn-1) {
+	for yindex := 0; yindex < len(board.Grid); yindex++ {
+		for xindex := 0; xindex < len(board.Grid); xindex++ {
+			if (board.Grid[yindex][xindex].Turn == board.Turn-1) {
 					LastX = xindex
 					LastY = yindex
 				}
 			}
 		}
 
-	if (board.isLegalMove(player,gogame.Move{LastY-1,LastX})) {
+	if (board.IsLegalMove(player,gogame.Move{LastY-1,LastX}))==1 {
 		return gogame.Move{
 		YPos: LastY-1,
 		XPos: LastX,
 		}
 	}
 
-	if (board.isLegalMove(player,gogame.Move{LastY+1,LastX})) {
+	if (board.IsLegalMove(player,gogame.Move{LastY+1,LastX}))==1 {
 		return gogame.Move{
 		YPos: LastY+1,
 		XPos: LastX,
 		}
 	}
 
-	if (board.isLegalMove(player,gogame.Move{LastY,LastX+1})) {
+	if (board.IsLegalMove(player,gogame.Move{LastY,LastX+1}))==1 {
 		return gogame.Move{
 		YPos: LastY,
 		XPos: LastX+1,
 		}
 	}
 
-	if (board.isLegalMove(player,gogame.Move{LastY,LastX-1})) {
+	if (board.IsLegalMove(player,gogame.Move{LastY,LastX-1})) ==1{
 		return gogame.Move{
 		YPos: LastY,
 		XPos: LastX-1,

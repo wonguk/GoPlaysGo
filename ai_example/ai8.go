@@ -1,11 +1,11 @@
 package ai
 
-import "github.com/cmu440/goplays/gogame"
+import "github.com/cmu440/goplaysgo/gogame"
 
 //Will always pick a move that decreases the Opponent's highest scorring terrority
 func NextMove(board gogame.Board, player gogame.Player) gogame.Move {
-	//var x int = 0
-	//var y int = 0
+	var x int = 0
+	var y int = 0
 	var OpponentX int = 0
 	var OpponentY int = 0
 	var maxT int = 0
@@ -18,10 +18,10 @@ func NextMove(board gogame.Board, player gogame.Player) gogame.Move {
 	}
 
 	for yindex := y; yindex < len(board.Grid); yindex++ {
-		for xindex := x; xindex , len(board.Grid); xindex++ {
+		for xindex := x; xindex < len(board.Grid); xindex++ {
 			if (board.Grid[y][x].Player == Opponent) {
 			EmptyChain := make([]int, len(board.Grid)*len(board.Grid))
-			StoneChain, ChainLen := board.FindStoneChain(Move{yindex, xindex}, board.Grid[yindex][xindex].Player, EmptyChain, 0)
+			StoneChain, ChainLen := board.FindStoneChain(gogame.Move{yindex, xindex}, board.Grid[yindex][xindex].Player, EmptyChain, 0)
 			TerrorityCount := board.CountTerritory(StoneChain, ChainLen)
 			if TerrorityCount > maxT {
 				OpponentX = xindex
@@ -31,28 +31,28 @@ func NextMove(board gogame.Board, player gogame.Player) gogame.Move {
 		}
 	}
 
-	if (board.isLegalMove(player,gogame.Move{OpponentY-1,OpponentX})) {
+	if (board.IsLegalMove(player,gogame.Move{OpponentY-1,OpponentX})) ==1 {
 		return gogame.Move{
 		YPos: OpponentY-1,
 		XPos: OpponentX,
 		}
 	}
 
-	if (board.isLegalMove(player,gogame.Move{OpponentY+1,OpponentX})) {
+	if (board.IsLegalMove(player,gogame.Move{OpponentY+1,OpponentX})) == 1{
 		return gogame.Move{
 		YPos: OpponentY+1,
 		XPos: OpponentX,
 		}
 	}
 
-	if (board.isLegalMove(player,gogame.Move{OpponentY,OpponentX+1})) {
+	if (board.IsLegalMove(player,gogame.Move{OpponentY,OpponentX+1})) == 1{
 		return gogame.Move{
 		YPos: OpponentY,
 		XPos: OpponentX+1,
 		}
 	}
 
-	if (board.isLegalMove(player,gogame.Move{OpponentY,OpponentX-1})) {
+	if (board.IsLegalMove(player,gogame.Move{OpponentY,OpponentX-1})) == 1 {
 		return gogame.Move{
 		YPos: OpponentY,
 		XPos: OpponentX-1,
