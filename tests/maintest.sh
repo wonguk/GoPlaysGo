@@ -52,6 +52,9 @@ function stopMainServers {
         kill -9 ${MAIN_SERVER_PID[$i]}
         wait ${MAIN_SERVER_PID[$i]} 2> /dev/null
     done
+
+    # Kill all AI Zombies
+    killall airunner
 }
 
 # Testing Single Server
