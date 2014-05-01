@@ -31,6 +31,8 @@ AI Server Runner:          bin/airunner
 Main Server Client Runner: bin/crunner
   Package: github.com/cmu440/goplaysgo/runners/crunner
 
+Note: Please compile the code before you run, just in case :)
+
 --------------------------------------------
 Sample Executions
 --------------------------------------------
