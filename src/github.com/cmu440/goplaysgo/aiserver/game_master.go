@@ -218,14 +218,14 @@ func (gs *gameStarter) startGame(i int, hostport string, checkChan chan checkReq
 	initChan chan initReq, startChan chan string, opp airpc.AIPlayer) {
 
 	cReq := checkReq{retChan: make(chan bool)}
-	var checkArgs airpc.CheckArgs = airpc.CheckArgs{gs.name}
+	var checkArgs = airpc.CheckArgs{gs.name}
 	var checkReply airpc.CheckReply
 
 	iReq := initReq{
 		size:    gogame.Small,
 		retChan: make(chan bool),
 	}
-	var initArgs airpc.InitGameArgs = airpc.InitGameArgs{gs.name, hostport, gogame.Small}
+	var initArgs = airpc.InitGameArgs{gs.name, hostport, gogame.Small}
 	var initReply airpc.InitGameReply
 
 	LOGV.Println("GameStarter:", gs.name, "Next Opp:", opp.Player)

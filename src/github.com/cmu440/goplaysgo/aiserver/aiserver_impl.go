@@ -14,9 +14,9 @@ import (
 	"github.com/cmu440/goplaysgo/rpc/mainrpc"
 )
 
+var errfile, _ = os.OpenFile("logs/AITest.err", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 var logfile, _ = os.OpenFile("logs/AITest.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 var logfile2, _ = os.OpenFile("logs/AI.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-var errfile, _ = os.OpenFile("logs/AITest.err", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 
 // Error Log
 var LOGE = log.New(errfile, "ERROR [AIServer] ",
@@ -24,6 +24,8 @@ var LOGE = log.New(errfile, "ERROR [AIServer] ",
 
 // Verbose Log
 var LOGV = log.New(logfile, "VERBOSE [AIServer] ", log.Lmicroseconds|log.Lshortfile)
+
+// Test Log
 var LOGT = log.New(logfile2, "VERBOSE [AIServer] ", log.Lmicroseconds|log.Lshortfile)
 
 type aiServer struct {

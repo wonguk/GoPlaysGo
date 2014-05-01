@@ -144,10 +144,9 @@ func (ai *aiInfo) initAI() (string, error) {
 			LOGV.Println("AIMaster:", ai.name, "Has Started at", port)
 			hostport := "localhost:" + strconv.Itoa(port)
 			return hostport, nil
-		} else {
-			LOGE.Println("AIMaster:", "Failed to Start", ai.name, err)
-			return "", err
 		}
+		LOGE.Println("AIMaster:", "Failed to Start", ai.name, err)
+		return "", err
 	}
 }
 

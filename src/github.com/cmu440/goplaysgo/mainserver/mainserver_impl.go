@@ -23,6 +23,8 @@ var LOGE = log.New(os.Stdout, "ERROR [MainServer] ",
 
 // Verbose Log
 var LOGV = log.New(os.Stdout, "VERBOSE [MainServer] ", log.Lmicroseconds|log.Lshortfile)
+
+// Paxos Log
 var LOGS = log.New(os.Stdout, "VERBOSE [MainServer] ", log.Lmicroseconds|log.Lshortfile)
 
 type isReady struct {
