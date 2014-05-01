@@ -53,6 +53,12 @@ bin/crunner -port=12302 sd
 # Kill Server w/ port 12302 and check Server still works
 # Note: To see the standings, it may take longer because the new AI server
 #       tries to connect to the dead Main Server
+# Note: When you ctrl-c from the mrunner, it seems to kill the AI servers
+#       that the specific main server started. So please don't panic if 
+#       you don't see some game results between different AIs. 
+#       On the other hand, The test script also kills the mrunners, but 
+#       the ai servers there don't seem to be killed as well.... so the 
+#       tests should verify that the correct behavior.
 bin/crunner -port=12301 sa test3 ai_examples/ai_random.go
 bin/crunner -port=12300 sd
 
